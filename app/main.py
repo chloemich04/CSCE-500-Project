@@ -14,7 +14,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 @app.get("/health") # Health check endpoint to verify if the application is running
-async def health_check():
+async def health():
     return {"status" : "ok"}
 
 @app.get("/")   # Root endpoint to render the index.html template
