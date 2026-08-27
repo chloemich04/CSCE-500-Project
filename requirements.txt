@@ -5,3 +5,11 @@
 
 # To capture current environment dependencies:
 # python -m pip freeze > requirements.txt
+
+fastapi>=0.95
+uvicorn[standard]>=0.22
+python-dotenv>=1.0
+python-jose[cryptography]>=3.3
+passlib[bcrypt]>=1.7
+jinja2>=3.1
+aiofiles>=23.1
