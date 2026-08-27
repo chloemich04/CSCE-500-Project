@@ -1,0 +1,7 @@
+# Project Python dependencies
+# Add your packages below, one per line, e.g.:
+# requests>=2.31.0
+# pytest>=7.0.0
+
+# To capture current environment dependencies:
+# python -m pip freeze > requirements.txt
