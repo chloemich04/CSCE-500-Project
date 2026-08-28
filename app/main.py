@@ -4,10 +4,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from dotenv import load_dotenv
+from app.api import auth
 
 load_dotenv() # Load environment variables from .env file
 
 app = FastAPI(title="CSCE 553 E-Commerce (skeleton)") # creating FastAPI instance
+app.include_router(auth.router) # Include the auth router for authentication endpoints
 
 # Mounting the static files directory to serve static assets
 app.mount("/static", StaticFiles(directory="app/static"), name="static")

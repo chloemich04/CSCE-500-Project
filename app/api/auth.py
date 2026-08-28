@@ -1,4 +1,5 @@
 import os
+from fastapi import FastAPI
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends 
@@ -12,8 +13,8 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
 
 # Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-router = APIRouter(prefix="api/auth", tags=["auth"])
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _users = {}
 
