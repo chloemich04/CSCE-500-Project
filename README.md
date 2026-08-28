@@ -43,7 +43,7 @@ python -m pip freeze > requirements.txt
 	- The virtual environment is created in the repository root at `.venv` and is ignored by Git.
 	- Keep `requirements.txt` up to date so teammates and CI can reproduce the environment.
 
-## Running the application
+### Running the application
 
 This project uses FastAPI with Uvicorn as the local development server.
 
