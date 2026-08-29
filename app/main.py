@@ -1,24 +1,47 @@
+"""Mini Shop — FastAPI entry point (health, HTML home, auth API)."""
+
 import os
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.requests import Request
-from dotenv import load_dotenv
-from app.api import auth
 
-load_dotenv() # Load environment variables from .env file
+from app.routers import auth
 
-app = FastAPI(title="CSCE 553 E-Commerce (skeleton)") # creating FastAPI instance
-app.include_router(auth.router) # Include the auth router for authentication endpoints
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Mounting the static files directory to serve static assets
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
+app = FastAPI(title="Mini Shop")
 
-@app.get("/health") # Health check endpoint to verify if the application is running
-async def health():
-    return {"status" : "ok"}
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-@app.get("/")   # Root endpoint to render the index.html template
-async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+app.include_router(auth.router)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    return templates.TemplateResponse(request, "index.html")
+
+
+@app.get("/register", response_class=HTMLResponse)
+def register_page(request: Request):
+    return templates.TemplateResponse(request, "register.html")
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    return templates.TemplateResponse(request, "login.html")
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)

@@ -1,4 +1,6 @@
-# CSCE-500-Project
+# CSCE-500-Project — Mini Shop
+
+Small FastAPI e-commerce app (baseline). This first slice includes **health**, **register**, **login**, and a **home page**. Products, cart, and orders will come after you test this.
 
 ## Python virtual environment
 
@@ -43,64 +45,84 @@ python -m pip freeze > requirements.txt
 	- The virtual environment is created in the repository root at `.venv` and is ignored by Git.
 	- Keep `requirements.txt` up to date so teammates and CI can reproduce the environment.
 
-### Running the application
+## 1. Environment variables
 
-This project uses FastAPI with Uvicorn as the local development server.
+1. Copy `.env.example` to `.env` (`.env` is gitignored — do not commit it).
+2. Set `DATABASE_URL` to your **Supabase Postgres** connection URI (Project Settings → Database).
+3. Set `JWT_SECRET` to a long random string.
+4. Optional: `PORT` (default `8000`), `JWT_EXPIRE_MINUTES` (default `60`).
 
-### Windows PowerShell
+If the URI starts with `postgres://`, the app converts it to `postgresql://` automatically. If the connection fails, add `?sslmode=require` at the end of the URL.
 
-Activate the virtual environment and start the server:
+## 2. Create the database table
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
+In the Supabase dashboard, open **SQL Editor**, paste `schema.sql`, and run it. For this slice you only need the `users` table.
 
-The server listens on all network interfaces, but open the application in a browser using:
+## 3. Run the app
 
-```text
-http://127.0.0.1:8000/
-```
-
-Do not use `http://0.0.0.0:8000/` in the browser. `0.0.0.0` is only used as the server bind address.
-
-## Current endpoints
-
-- `GET /health` returns `{"status":"ok"}`.
-- `POST /api/auth/register` creates an account.
-- `POST /api/auth/login` verifies an account and returns a JWT bearer token.
-- `GET /docs` opens FastAPI's interactive API documentation.
-
-Example requests from PowerShell:
+From the project root, with the venv activated:
 
 ```powershell
-$body = @{ email = "me@example.com"; password = "use-a-strong-password" } | ConvertTo-Json
-
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/auth/register" `
-    -Method POST -ContentType "application/json" -Body $body
-
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/auth/login" `
-    -Method POST -ContentType "application/json" -Body $body
+python -m app.main
 ```
 
-Passwords are hashed with Argon2 and are never stored as plain text. The login response contains an access token that will be used for protected API routes as the project grows.
+Or:
 
-## Environment variables
-
-Local configuration belongs in a `.env` file, which must not be committed to Git. Use placeholder values when sharing configuration with teammates:
-
-```env
-DATABASE_URL=your-supabase-postgresql-connection-string
-DATABASE_NAME=your-database-name
-DATABASE_PASSWORD=your-database-password
-SECRET_KEY=your-long-random-secret
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-PORT=8000
+```powershell
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-The application loads `.env` for local development. Render supplies the `PORT` environment variable in production, so the deployment configuration should use that value rather than hard-coding a production port.
+The port comes from `PORT` in `.env` when you use `python -m app.main`. The server listens on `0.0.0.0`.
 
-## Current development limitation
+Open http://127.0.0.1:8000 in a browser.
 
-Authentication is currently a learning scaffold. Registered users are stored in an in-memory dictionary, so accounts disappear whenever the server restarts. PostgreSQL persistence through Supabase still needs to be implemented before this is production-ready.
+## 4. What you can test now
+
+### HTML
+
+| Page | URL |
+|------|-----|
+| Home | `GET /` |
+| Register | `GET /register` |
+| Login | `GET /login` |
+
+Logout is a button on the home page (clears the JWT stored in the browser).
+
+### JSON API
+
+| Method | Path | Body | Success |
+|--------|------|------|---------|
+| `GET` | `/health` | — | `{"status": "ok"}` |
+| `POST` | `/api/auth/register` | `{"email","password","account_type"}` | `201` + user JSON |
+| `POST` | `/api/auth/login` | `{"email","password"}` | `{"access_token": "..."}` |
+
+`account_type` must be `"customer"` or `"store_manager"`. Passwords are hashed with **passlib + bcrypt**. The login token is a **JWT**. Protected routes (next slice) will use `Authorization: Bearer <token>`.
+
+Example (PowerShell):
+
+```powershell
+curl http://127.0.0.1:8000/health
+
+curl -X POST http://127.0.0.1:8000/api/auth/register -H "Content-Type: application/json" -d "{\"email\":\"you@example.com\",\"password\":\"secret1\",\"account_type\":\"customer\"}"
+
+curl -X POST http://127.0.0.1:8000/api/auth/login -H "Content-Type: application/json" -d "{\"email\":\"you@example.com\",\"password\":\"secret1\"}"
+```
+
+## Project layout
+
+```
+app/                 FastAPI application
+  main.py            Health + HTML routes + server entry
+  config.py          Reads .env
+  database.py        PostgreSQL via DATABASE_URL
+  models.py          User table mapping
+  schemas.py         Request/response JSON shapes
+  auth.py            Password hash + JWT
+  routers/auth.py    /api/auth/register and /login
+templates/           Jinja2 HTML pages
+static/              CSS + small JS for the JWT in the browser
+schema.sql           SQL to run in Supabase
+.env.example         Placeholders only
+```
+
+The browser never talks to Supabase directly. Only the Python API uses `DATABASE_URL`.
