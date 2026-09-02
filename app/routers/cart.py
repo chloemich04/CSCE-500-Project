@@ -5,30 +5,14 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, UniqueConstraint, func
 from sqlalchemy.orm import Session, joinedload, relationship
 
 from app.config import settings
 from app.database import Base, get_db
-from app.models import User
+from app.models import Product, User
 
 router = APIRouter(prefix="/api/cart", tags=["cart"])
-
-
-class Product(Base):
-    """Read/update mapping only — table is owned by another teammate."""
-
-    __tablename__ = "products"
-
-    id = Column(Integer, primary_key=True)
-    name = Column(String)
-    description = Column(String)
-    category = Column(String)
-    platform = Column(String)
-    price = Column(Numeric)
-    stock = Column(Integer)
-    created_at = Column(DateTime(timezone=True))
-    updated_at = Column(DateTime(timezone=True))
 
 
 class Cart(Base):
