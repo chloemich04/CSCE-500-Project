@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Orders · Mini Shop{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Your orders</h1>
+  <p class="muted">Orders placed from your cart. No payment was processed.</p>
+  <p id="error" class="error"></p>
+  <div id="orders-empty" class="muted" hidden>You have not placed any orders yet.</div>
+  <div id="orders-list"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  async function loadOrders() {
+    const error = document.getElementById("error");
+    error.textContent = "";
+    const token = getToken();
+    if (!token) {
+      error.textContent = "Please log in first.";
+      return;
+    }
+
+    const res = await fetch("/api/orders", {
+      headers: { Authorization: "Bearer " + token },
+    });
+    const data = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      error.textContent = data.detail || "Could not load orders.";
+      return;
+    }
+
+    const empty = document.getElementById("orders-empty");
+    const list = document.getElementById("orders-list");
+    list.innerHTML = "";
+
+    if (!data.orders || data.orders.length === 0) {
+      empty.hidden = false;
+      return;
+    }
+
+    empty.hidden = true;
+    data.orders.forEach(function (order) {
+      const block = document.createElement("div");
+      block.className = "order-block";
+      let rows = "";
+      (order.items || []).forEach(function (item) {
+        rows +=
+          "<tr><td>" +
+          (item.name || "Product #" + item.product_id) +
+          "</td><td>" +
+          item.quantity +
+          "</td><td>$" +
+          Number(item.price_at_order).toFixed(2) +
+          "</td><td>$" +
+          Number(item.line_total).toFixed(2) +
+          "</td></tr>";
+      });
+      block.innerHTML =
+        "<h2>Order #" + order.id + " · " + order.status + "</h2>" +
+        '<p class="muted">' + (order.created_at || "") + "</p>" +
+        '<table class="data-table"><thead><tr><th>Product</th><th>Qty</th><th>Price at order</th><th>Line</th></tr></thead><tbody>' +
+        rows +
+        "</tbody></table>" +
+        "<p><strong>Total: $" + Number(order.total).toFixed(2) + "</strong></p>";
+      list.appendChild(block);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", loadOrders);
+</script>
+{% endblock %}

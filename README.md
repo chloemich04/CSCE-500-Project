@@ -1,6 +1,6 @@
 # CSCE-500-Project — Mini Shop
 
-Small FastAPI e-commerce app (baseline). This first slice includes **health**, **register**, **login**, and a **home page**. Products, cart, and orders will come after you test this.
+Small FastAPI e-commerce app (video-game shop). Auth, products, cart, and orders.
 
 ## Python virtual environment
 
@@ -56,7 +56,7 @@ If the URI starts with `postgres://`, the app converts it to `postgresql://` aut
 
 ## 2. Create the database table
 
-In the Supabase dashboard, open **SQL Editor**, paste `schema.sql`, and run it. For this slice you only need the `users` table.
+In the Supabase dashboard, open **SQL Editor**, paste `schema.sql`, and run it. The `products` table is owned by another teammate and must already exist before the cart/order foreign keys will succeed. If `users` already exists, run only the cart/order `CREATE TABLE` block.
 
 ## 3. Run the app
 
@@ -87,6 +87,8 @@ Open http://127.0.0.1:8000 in a browser.
 | Login | `GET /login` | Log in with email/password |
 | Products | `GET /products` | Public product listing and search |
 | Manage Products | `GET /products/manage` | Store manager add/edit form |
+| Cart | `GET /cart` |
+| Orders | `GET /orders` |
 
 Logout is a button on the home page (clears the JWT stored in the browser).
 
