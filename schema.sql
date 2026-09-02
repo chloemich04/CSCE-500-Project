@@ -1,8 +1,5 @@
 -- Mini Shop — tables for Supabase
 -- Run this in: Supabase Dashboard → SQL Editor → New query → Run
---
--- Step 1 (this file, now): users only — enough for register / login.
--- Later steps will add products, cart, and orders.
 
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
@@ -10,4 +7,16 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     account_type TEXT NOT NULL CHECK (account_type IN ('customer', 'store_manager')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    category TEXT,
+    platform TEXT,
+    price NUMERIC(10, 2) NOT NULL,
+    stock INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

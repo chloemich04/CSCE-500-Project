@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Manage Products · Mini Shop{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Manage Products</h1>
+  <p class="muted">Only a store manager can create or update products.</p>
+
+  <form id="product-form">
+    <input type="hidden" id="product-id" />
+
+    <label for="name">Name</label>
+    <input id="name" name="name" required />
+
+    <label for="description">Description</label>
+    <input id="description" name="description" />
+
+    <label for="category">Category</label>
+    <input id="category" name="category" />
+
+    <label for="platform">Platform</label>
+    <input id="platform" name="platform" />
+
+    <label for="price">Price</label>
+    <input id="price" name="price" type="number" min="0.01" step="0.01" required />
+
+    <label for="stock">Stock</label>
+    <input id="stock" name="stock" type="number" min="0" step="1" required />
+
+    <button type="submit" id="submit-btn">Save product</button>
+    <button type="button" class="secondary" id="reset-btn">Clear form</button>
+    <p id="product-error" class="error"></p>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function getToken() {
+    return localStorage.getItem("access_token");
+  }
+
+  function getProductPayload() {
+    return {
+      name: document.getElementById("name").value,
+      description: document.getElementById("description").value || null,
+      category: document.getElementById("category").value || null,
+      platform: document.getElementById("platform").value || null,
+      price: Number(document.getElementById("price").value),
+      stock: Number(document.getElementById("stock").value),
+    };
+  }
+
+  function clearForm() {
+    document.getElementById("product-form").reset();
+    document.getElementById("product-id").value = "";
+    document.getElementById("submit-btn").textContent = "Save product";
+    document.getElementById("product-error").textContent = "";
+  }
+
+  async function saveProduct(event) {
+    event.preventDefault();
+    const errorEl = document.getElementById("product-error");
+    errorEl.textContent = "";
+
+    const token = getToken();
+    if (!token) {
+      errorEl.textContent = "Log in as a store manager before managing products.";
+      return;
+    }
+
+    const payload = getProductPayload();
+    const productId = document.getElementById("product-id").value;
+    const method = productId ? "PUT" : "POST";
+    const url = productId ? `/api/products/${productId}` : "/api/products";
+
+    const res = await fetch(url, {
+      method: method,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      errorEl.textContent = data.detail || "Product save failed.";
+      return;
+    }
+
+    clearForm();
+    window.location.href = "/products";
+  }
+
+  document.getElementById("product-form").addEventListener("submit", saveProduct);
+  document.getElementById("reset-btn").addEventListener("click", clearForm);
+</script>
+{% endblock %}
