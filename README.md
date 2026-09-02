@@ -1,6 +1,6 @@
 # CSCE-500-Project — Mini Shop
 
-Small FastAPI e-commerce app (baseline). This first slice includes **health**, **register**, **login**, and a **home page**. Products, cart, and orders will come after you test this.
+Small FastAPI e-commerce app (video-game shop). Auth, products, cart, and orders.
 
 ## Python virtual environment
 
@@ -56,7 +56,7 @@ If the URI starts with `postgres://`, the app converts it to `postgresql://` aut
 
 ## 2. Create the database table
 
-In the Supabase dashboard, open **SQL Editor**, paste `schema.sql`, and run it. For this slice you only need the `users` table.
+In the Supabase dashboard, open **SQL Editor**, paste `schema.sql`, and run it. The `products` table is owned by another teammate and must already exist before the cart/order foreign keys will succeed. If `users` already exists, run only the cart/order `CREATE TABLE` block.
 
 ## 3. Run the app
 
@@ -85,6 +85,8 @@ Open http://127.0.0.1:8000 in a browser.
 | Home | `GET /` |
 | Register | `GET /register` |
 | Login | `GET /login` |
+| Cart | `GET /cart` |
+| Orders | `GET /orders` |
 
 Logout is a button on the home page (clears the JWT stored in the browser).
 
@@ -96,7 +98,16 @@ Logout is a button on the home page (clears the JWT stored in the browser).
 | `POST` | `/api/auth/register` | `{"email","password","account_type"}` | `201` + user JSON |
 | `POST` | `/api/auth/login` | `{"email","password"}` | `{"access_token": "..."}` |
 
-`account_type` must be `"customer"` or `"store_manager"`. Passwords are hashed with **passlib + bcrypt**. The login token is a **JWT**. Protected routes (next slice) will use `Authorization: Bearer <token>`.
+`account_type` must be `"customer"` or `"store_manager"`. Passwords are hashed with **passlib + bcrypt**. The login token is a **JWT**. Cart and order routes require `Authorization: Bearer <token>`.
+
+| Method | Path | Body | Success |
+|--------|------|------|---------|
+| `POST` | `/api/cart` | `{"product_id","quantity"}` | cart with product names, prices, total |
+| `GET` | `/api/cart` | — | same cart payload |
+| `PUT` | `/api/cart/{item_id}` | `{"quantity"}` | updated cart |
+| `DELETE` | `/api/cart/{item_id}` | — | updated cart |
+| `POST` | `/api/orders` | — | creates an order from the cart, copies `products.price` into `price_at_order`, then empties the cart |
+| `GET` | `/api/orders` | — | `{ "orders": [ ... ] }` |
 
 Example (PowerShell):
 

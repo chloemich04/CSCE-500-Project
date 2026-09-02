@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Cart · Mini Shop{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Your cart</h1>
+  <p class="muted">Change quantities, remove items, then place your order (no real payment).</p>
+  <p id="error" class="error"></p>
+  <div id="cart-empty" class="muted" hidden>Your cart is empty.</div>
+  <table class="data-table" id="cart-table" hidden>
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>Price</th>
+        <th>Qty</th>
+        <th>Line</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="cart-body"></tbody>
+  </table>
+  <p id="cart-total"></p>
+  <button type="button" id="checkout-btn" hidden>Place order</button>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  function authHeaders() {
+    const token = getToken();
+    return {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + token,
+    };
+  }
+
+  async function loadCart() {
+    const error = document.getElementById("error");
+    error.textContent = "";
+    const token = getToken();
+    if (!token) {
+      error.textContent = "Please log in first.";
+      return;
+    }
+
+    const res = await fetch("/api/cart", { headers: authHeaders() });
+    const data = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      error.textContent = data.detail || "Could not load cart.";
+      return;
+    }
+
+    const empty = document.getElementById("cart-empty");
+    const table = document.getElementById("cart-table");
+    const body = document.getElementById("cart-body");
+    const totalEl = document.getElementById("cart-total");
+    const checkoutBtn = document.getElementById("checkout-btn");
+    body.innerHTML = "";
+
+    if (!data.items || data.items.length === 0) {
+      empty.hidden = false;
+      table.hidden = true;
+      totalEl.textContent = "";
+      checkoutBtn.hidden = true;
+      return;
+    }
+
+    empty.hidden = true;
+    table.hidden = false;
+    checkoutBtn.hidden = false;
+    data.items.forEach(function (item) {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + item.name + "</td>" +
+        "<td>$" + Number(item.price).toFixed(2) + "</td>" +
+        '<td><input class="qty-input" type="number" min="1" value="' + item.quantity + '" data-id="' + item.id + '" /></td>' +
+        "<td>$" + Number(item.line_total).toFixed(2) + "</td>" +
+        '<td><button type="button" class="secondary remove-btn" data-id="' + item.id + '">Remove</button></td>';
+      body.appendChild(tr);
+    });
+    totalEl.textContent = "Total: $" + Number(data.total).toFixed(2);
+  }
+
+  document.getElementById("cart-body").addEventListener("change", async function (event) {
+    if (!event.target.classList.contains("qty-input")) return;
+    const id = event.target.getAttribute("data-id");
+    const quantity = Number(event.target.value);
+    const res = await fetch("/api/cart/" + id, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({ quantity: quantity }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(function () { return {}; });
+      document.getElementById("error").textContent = data.detail || "Could not update quantity.";
+    }
+    await loadCart();
+  });
+
+  document.getElementById("cart-body").addEventListener("click", async function (event) {
+    const btn = event.target.closest(".remove-btn");
+    if (!btn) return;
+    const id = btn.getAttribute("data-id");
+    const res = await fetch("/api/cart/" + id, { method: "DELETE", headers: authHeaders() });
+    if (!res.ok) {
+      const data = await res.json().catch(function () { return {}; });
+      document.getElementById("error").textContent = data.detail || "Could not remove item.";
+    }
+    await loadCart();
+  });
+
+  document.getElementById("checkout-btn").addEventListener("click", async function () {
+    const error = document.getElementById("error");
+    error.textContent = "";
+    const res = await fetch("/api/orders", { method: "POST", headers: authHeaders() });
+    const data = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      error.textContent = data.detail || "Checkout failed.";
+      return;
+    }
+    window.location.href = "/orders";
+  });
+
+  document.addEventListener("DOMContentLoaded", loadCart);
+</script>
+{% endblock %}

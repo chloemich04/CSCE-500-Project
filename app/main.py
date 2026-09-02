@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.routers import auth
+from app.routers import auth, cart, orders
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -18,6 +18,8 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 app.include_router(auth.router)
+app.include_router(cart.router)
+app.include_router(orders.router)
 
 
 @app.get("/health")
@@ -38,6 +40,16 @@ def register_page(request: Request):
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse(request, "login.html")
+
+
+@app.get("/cart", response_class=HTMLResponse)
+def cart_page(request: Request):
+    return templates.TemplateResponse(request, "cart.html")
+
+
+@app.get("/orders", response_class=HTMLResponse)
+def orders_page(request: Request):
+    return templates.TemplateResponse(request, "orders.html")
 
 
 if __name__ == "__main__":
