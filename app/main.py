@@ -1,4 +1,4 @@
-"""Mini Shop — FastAPI entry point (health, HTML home, auth API)."""
+"""Mini Shop — FastAPI entry point (health, HTML pages, auth, and product API)."""
 
 import os
 from pathlib import Path
@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.routers import auth, cart, orders
+from app.routers import auth, products, cart, orders
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -18,6 +18,7 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 app.include_router(auth.router)
+app.include_router(products.router)
 app.include_router(cart.router)
 app.include_router(orders.router)
 
@@ -40,6 +41,16 @@ def register_page(request: Request):
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse(request, "login.html")
+
+
+@app.get("/products", response_class=HTMLResponse)
+def products_page(request: Request):
+    return templates.TemplateResponse(request, "products.html")
+
+
+@app.get("/products/manage", response_class=HTMLResponse)
+def product_manager_page(request: Request):
+    return templates.TemplateResponse(request, "product_manager.html")
 
 
 @app.get("/cart", response_class=HTMLResponse)
