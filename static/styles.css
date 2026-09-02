@@ -116,3 +116,31 @@ button.secondary {
   font-size: 0.95rem;
   color: var(--muted);
 }
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.45rem 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.qty-input {
+  width: 4.5rem;
+}
+
+.order-block {
+  margin-top: 1.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.order-block h2 {
+  font-size: 1.1rem;
+  margin-bottom: 0.25rem;
+}

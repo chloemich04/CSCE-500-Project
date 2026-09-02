@@ -1,6 +1,6 @@
 # CSCE-500-Project — Mini Shop
 
-Small FastAPI e-commerce app (baseline). This first slice includes **health**, **register**, **login**, and a **home page**. Products, cart, and orders will come after you test this.
+Small FastAPI e-commerce app (video-game shop). Auth, products, cart, and orders.
 
 ## Python virtual environment
 
@@ -56,7 +56,7 @@ If the URI starts with `postgres://`, the app converts it to `postgresql://` aut
 
 ## 2. Create the database table
 
-In the Supabase dashboard, open **SQL Editor**, paste `schema.sql`, and run it. For this slice you only need the `users` table.
+In the Supabase dashboard, open **SQL Editor**, paste `schema.sql`, and run it. The `products` table is owned by another teammate and must already exist before the cart/order foreign keys will succeed. If `users` already exists, run only the cart/order `CREATE TABLE` block.
 
 ## 3. Run the app
 
@@ -80,48 +80,85 @@ Open http://127.0.0.1:8000 in a browser.
 
 ### HTML
 
-| Page | URL |
-|------|-----|
-| Home | `GET /` |
-| Register | `GET /register` |
-| Login | `GET /login` |
+| Page | URL | Purpose |
+|------|-----|---------|
+| Home | `GET /` | Landing page with auth status |
+| Register | `GET /register` | Create a new account |
+| Login | `GET /login` | Log in with email/password |
+| Products | `GET /products` | Public product listing and search |
+| Manage Products | `GET /products/manage` | Store manager add/edit form |
+| Cart | `GET /cart` |
+| Orders | `GET /orders` |
 
 Logout is a button on the home page (clears the JWT stored in the browser).
 
 ### JSON API
 
-| Method | Path | Body | Success |
-|--------|------|------|---------|
-| `GET` | `/health` | — | `{"status": "ok"}` |
-| `POST` | `/api/auth/register` | `{"email","password","account_type"}` | `201` + user JSON |
-| `POST` | `/api/auth/login` | `{"email","password"}` | `{"access_token": "..."}` |
+| Method | Path | Auth | Body | Success |
+|--------|------|------|------|---------|
+| `GET` | `/health` | — | — | `{"status": "ok"}` |
+| `POST` | `/api/auth/register` | — | `{"email","password","account_type"}` | `201` + user JSON |
+| `POST` | `/api/auth/login` | — | `{"email","password"}` | `{"access_token": "..."}` |
+| `GET` | `/api/products` | — | — | `[{id, name, price, stock, ...}]` |
+| `GET` | `/api/products/search` | — | `?q=<query>` | Matching products array |
+| `POST` | `/api/products` | Bearer | `{name, price, stock, ...}` | `201` + product JSON (manager only) |
+| `PUT` | `/api/products/{id}` | Bearer | `{name, price, stock, ...}` | `200` + updated product (manager only) |
 
-`account_type` must be `"customer"` or `"store_manager"`. Passwords are hashed with **passlib + bcrypt**. The login token is a **JWT**. Protected routes (next slice) will use `Authorization: Bearer <token>`.
+**Auth Notes:**
+- `account_type` must be `"customer"` or `"store_manager"`.
+- Passwords are hashed with **passlib + Argon2** (min. 8 characters).
+- The login token is a **JWT**. Protected routes use `Authorization: Bearer <token>`.
+- Only `store_manager` accounts can create/update products.
 
-Example (PowerShell):
+**Example (PowerShell):**
 
 ```powershell
+# Health check
 curl http://127.0.0.1:8000/health
 
-curl -X POST http://127.0.0.1:8000/api/auth/register -H "Content-Type: application/json" -d "{\"email\":\"you@example.com\",\"password\":\"secret1\",\"account_type\":\"customer\"}"
+# Register
+curl -X POST http://127.0.0.1:8000/api/auth/register -H "Content-Type: application/json" -d "{\"email\":\"mgr@shop.com\",\"password\":\"SecurePass123\",\"account_type\":\"store_manager\"}"
 
-curl -X POST http://127.0.0.1:8000/api/auth/login -H "Content-Type: application/json" -d "{\"email\":\"you@example.com\",\"password\":\"secret1\"}"
+# Login
+curl -X POST http://127.0.0.1:8000/api/auth/login -H "Content-Type: application/json" -d "{\"email\":\"mgr@shop.com\",\"password\":\"SecurePass123\"}"
+
+# List all products
+curl http://127.0.0.1:8000/api/products
+
+# Search products
+curl "http://127.0.0.1:8000/api/products/search?q=game"
+
+# Create a product (replace TOKEN with the access_token from login)
+curl -X POST http://127.0.0.1:8000/api/products -H "Content-Type: application/json" -H "Authorization: Bearer TOKEN" -d "{\"name\":\"Game Title\",\"price\":29.99,\"stock\":10,\"category\":\"games\",\"platform\":\"PC\"}"
+
+# Update a product (replace ID with product id and TOKEN with your access_token)
+curl -X PUT http://127.0.0.1:8000/api/products/1 -H "Content-Type: application/json" -H "Authorization: Bearer TOKEN" -d "{\"name\":\"Game Title\",\"price\":24.99,\"stock\":5}"
 ```
 
 ## Project layout
 
 ```
 app/                 FastAPI application
-  main.py            Health + HTML routes + server entry
+  main.py            Health, auth, product pages + server entry
   config.py          Reads .env
   database.py        PostgreSQL via DATABASE_URL
-  models.py          User table mapping
-  schemas.py         Request/response JSON shapes
-  auth.py            Password hash + JWT
-  routers/auth.py    /api/auth/register and /login
+  models.py          User and Product table mappings
+  schemas.py         Request/response JSON shapes (auth + products)
+  auth.py            Password hash (Argon2) + JWT
+  routers/
+    auth.py          /api/auth/register and /login
+    products.py      /api/products (CRUD + search)
 templates/           Jinja2 HTML pages
-static/              CSS + small JS for the JWT in the browser
-schema.sql           SQL to run in Supabase
+  base.html          Navigation and layout template
+  index.html         Home page
+  register.html      Registration form
+  login.html         Login form
+  products.html      Public product list and search
+  product_manager.html Store manager add/edit product form
+static/              CSS + JavaScript
+  styles.css         Styling for all pages
+  auth.js            JWT management and auth UI state
+schema.sql           SQL to run in Supabase (users + products)
 .env.example         Placeholders only
 ```
 

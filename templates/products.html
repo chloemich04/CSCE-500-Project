@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Products · Mini Shop{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Products</h1>
+  <div class="toolbar">
+    <input id="search-input" type="text" placeholder="Search products..." />
+    <button id="search-btn" type="button">Search</button>
+  </div>
+  <div id="products-list" class="product-grid"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  async function loadProducts(query = "") {
+    const url = query ? `/api/products/search?q=${encodeURIComponent(query)}` : "/api/products";
+    const res = await fetch(url);
+    const products = await res.json();
+    const list = document.getElementById("products-list");
+
+    if (!Array.isArray(products) || products.length === 0) {
+      list.innerHTML = '<p class="muted">No products found.</p>';
+      return;
+    }
+
+    list.innerHTML = products.map(function (product) {
+      return `
+        <article class="product-card">
+          <h3>${product.name}</h3>
+          <p class="muted">${product.category || "Uncategorized"} • ${product.platform || "General"}</p>
+          <p>${product.description || "No description available."}</p>
+          <div class="product-meta">
+            <strong>$${Number(product.price).toFixed(2)}</strong>
+            <span>Stock: ${product.stock}</span>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  document.getElementById("search-btn").addEventListener("click", function () {
+    const query = document.getElementById("search-input").value.trim();
+    loadProducts(query);
+  });
+
+  document.getElementById("search-input").addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      const query = document.getElementById("search-input").value.trim();
+      loadProducts(query);
+    }
+  });
+
+  loadProducts();
+</script>
+{% endblock %}
