@@ -16,7 +16,8 @@ API code locally while using the same Supabase database.
 | Active fraction | 10% | Approximate e-commerce DAU/MAU assumption |
 | Requests per active user per peak hour | 5 | One peak-hour session with approximately five API requests |
 | Read/write mix | 80% reads / 20% writes | Required mixed workload from the assignment |
-| Bytes per response | 500 bytes | Current `/api/products` response measured near 446 bytes and rounded |
+| Bytes per read response | 8,515 bytes | Measured from `GET /api/products` after seeding the catalog to 50 products |
+| Bytes stored per write | 500 bytes | Planning estimate; actual cart storage is smaller and will be treated as an approximation |
 | Stored copies | 1 | Current M1 architecture |
 | Read path | `GET /api/products` | Product-list endpoint |
 | Write path | `POST /api/cart` | Add or update a product in a customer's cart |
@@ -32,15 +33,22 @@ Write RPS is:
 
 `peak RPS × 20%`
 
+### Dataset preparation
+
+Before the load tests, the product catalog was seeded sequentially from
+3 products to 50 products. After seeding, `GET /api/products` returned
+8,515 bytes. No 60-second load stages had been run when this model was
+updated.
+
 The storage/day estimate assumes the peak write rate continues for
 86,400 seconds. This deliberately conservative assumption will be
 revisited after measurement.
 
 | Registered users | Active users | Peak RPS | Write RPS | Storage/day | Bandwidth |
 |---:|---:|---:|---:|---:|---:|
-| 10,000 | 1,000 | 1.39 | 0.28 | 12.1 MB/day | 695 B/s |
-| 1,000,000 | 100,000 | 138.9 | 27.8 | 1.20 GB/day | 69.4 KB/s |
-| 100,000,000 | 10,000,000 | 13,889 | 2,778 | 120 GB/day | 6.94 MB/s |
+| 10,000 | 1,000 | 1.39 | 0.28 | 12.1 MB/day | 11.8 KB/s |
+| 1,000,000 | 100,000 | 138.9 | 27.8 | 1.20 GB/day | 1.18 MB/s |
+| 100,000,000 | 10,000,000 | 13,889 | 2,778 | 120 GB/day | 118.3 MB/s |
 
 ## Predicted first limit
 
