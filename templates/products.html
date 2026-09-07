@@ -24,9 +24,26 @@
 
   async function loadProducts(query = "") {
     const url = query ? `/api/products/search?q=${encodeURIComponent(query)}` : "/api/products";
-    const res = await fetch(url);
-    const products = await res.json();
     const list = document.getElementById("products-list");
+    const token = getToken();
+
+    if (!token) {
+      list.innerHTML = '<p class="muted">Please log in to view products.</p>';
+      return;
+    }
+
+    const res = await fetch(url, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      list.innerHTML = '<p class="error">Unable to load products. Please log in again.</p>';
+      return;
+    }
+
+    const products = await res.json();
 
     if (!Array.isArray(products) || products.length === 0) {
       list.innerHTML = '<p class="muted">No products found.</p>';

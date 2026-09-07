@@ -148,7 +148,7 @@ Base URL (hosted): `https://csce-500-project.onrender.com`
 | GET    | /health              | -      | -                                 | `{"status": "ok"}`                   |
 | POST   | /api/auth/register   | -      | `{email, password, account_type}` | 201 + user JSON                      |
 | POST   | /api/auth/login      | -      | `{email, password}`               | `{"access_token": "..."}`            |
-| GET    | /api/products        | -      | -                                 | `[{id, name, price, stock, ...}]`    |
+| GET    | /api/products        | Bearer |                                   |`[{id, name, price, stock, ...}]`    |
 | GET    | /api/products/search | -      | `?q=<query>`                      | Matching products array              |
 | POST   | /api/products        | Bearer | `{name, price, stock, ...}`       | 201 + product JSON (manager only)    |
 | PUT    | /api/products/{id}   | Bearer | `{name, price, stock, ...}`       | 200 + updated product (manager only) |
@@ -167,6 +167,7 @@ Base URL (hosted): `https://csce-500-project.onrender.com`
 - The login token is a JWT. Protected routes use `Authorization: Bearer <token>`.
 - Only `store_manager` accounts can create/update products.
 - Access control is intentionally light: `account_type` is stored on the user, without a hardened permission system.
+- Product list and search endpoints require a valid customer or store-manager JWT.
 
 ## curl examples (against the hosted URL)
 
@@ -189,8 +190,13 @@ curl -sS -X POST "$BASE/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"email":"alex@example.com","password":"ClassDemo123!"}'
 
-# List products (read)
-curl -sS "$BASE/api/products"
+# List products (authenticated read)
+curl -sS "$BASE/api/products" \
+  -H "Authorization: Bearer TOKEN"
+
+# Search products (authenticated read)
+curl -sS "$BASE/api/products/search?q=game" \
+  -H "Authorization: Bearer TOKEN"
 
 # Search products (read)
 curl -sS "$BASE/api/products/search?q=game"

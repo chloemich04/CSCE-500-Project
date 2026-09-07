@@ -80,6 +80,7 @@ def update_product(
 def search_products(
     q: str = Query(..., min_length=1),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     search_term = f"%{q.lower()}%"
     return (
@@ -98,5 +99,5 @@ def search_products(
 
 
 @router.get("/products", response_model=list[ProductOut])
-def list_products(db: Session = Depends(get_db)):
+def list_products(db: Session = Depends(get_db), current_user: User = Depends(get_current_user),):
     return db.query(Product).order_by(Product.created_at.desc()).all()
