@@ -1,7 +1,11 @@
 # M2 Workload and Capacity Prediction
 
 Prediction recorded: 2026-09-07 15:25:56 -05:00  
-Git commit: `f82f258`
+Git commit: `bd1072a`
+The prediction was initially recorded at commit `34b9f76` before any
+load sweep. The dataset-size update was recorded at `80981dd`. The
+authenticated-read correction was completed at `bd1072a`, before any
+measured load stages.
 
 ## System under test
 

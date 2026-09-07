@@ -2,7 +2,7 @@
 
 ## Test configuration
 
-- Git commit: `80981dd`
+- Git commit: `bd1072a`
 - Local environment: Windows laptop
 - Local API: `http://127.0.0.1:8000`
 - Database: Existing Supabase PostgreSQL database
