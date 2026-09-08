@@ -165,3 +165,50 @@ Resource observations for each stage will be added below.
 - Errors: 0
 - Purpose: Confirm that `--body-file` sends valid JSON before repeating the official write stage.
 - Treatment: Configuration check only; excluded from performance tables and graphs.
+
+## L-write-c16-valid
+
+- Start: approximately 2026-09-07 23:35:35 -05:00, derived from the end time and expected runtime
+- Mid-stage resource timestamp: not captured
+- End: 2026-09-07 23:36:46 -05:00
+- API PID: 10920
+- API CPU: 1%
+- API working-set memory: 125,896 KB (approximately 122.9 MB)
+- Database connections: 28 total; 10 idle in transaction, 9 idle, 7 state unavailable/NULL, 2 active
+- Screenshot: not captured
+- Attempts: 660
+- Successes: 660
+- Errors: 0
+- Successful RPS: 10.749
+- p50: 1,405.19 ms
+- p95: 1,754.66 ms
+- p99: 2,211.65 ms
+- Maximum latency: 2,662.87 ms
+- Error rate: 0%
+- Final product-4 cart quantity: 221
+- Correctness observation: The cart quantity increased far less than the number of successful HTTP writes. Concurrent read-modify-write updates likely overwrote one another. HTTP success therefore did not guarantee that every requested increment was preserved.
+
+## L-mix-c16
+
+- Start: 2026-09-07 23:40:48 -05:00
+- Mid-stage resource timestamp: 2026-09-07 23:39:30 -05:00
+- End: 2026-09-07 23:42:08 -05:00
+- API PID: 10920
+- API CPU: 1%
+- API working-set memory: 112,000 KB (approximately 109.4 MB)
+- Database connections: 28 total; 10 idle in transaction, 9 idle, 7 state unavailable/NULL, 2 active
+- Screenshot: not captured
+- Workload: approximately 80% `GET /api/products` and 20% `POST /api/cart`
+- Attempts: 1,417
+- Successes: 1,417
+- Errors: 0
+- Successful RPS: 23.144
+- p50: 485.71 ms
+- p95: 1,387.91 ms
+- p99: 1,543.53 ms
+- Maximum latency: 1,825.82 ms
+- Error rate: 0%
+- Starting cart quantity: 221
+- Final cart quantity: 405
+- Net observed quantity increase: 184
+- Limitation: The driver randomly selected operations but did not save the operation type in the raw CSV. Concurrent cart updates also experienced lost increments, so the final quantity cannot be treated as the number of successful write requests.
