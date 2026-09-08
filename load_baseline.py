@@ -97,6 +97,7 @@ def main() -> int:
     p.add_argument("--path", default="/health")
     p.add_argument("--method", default="GET")
     p.add_argument("--body", default="")
+    p.add_argument("--body-file", default="", help="Read request JSON body from a file")
     p.add_argument("--token", default=os.environ.get("M2_TOKEN", ""))
     p.add_argument("--no-auth", action="store_true")
     p.add_argument("--concurrency", type=int, default=4)
@@ -109,11 +110,24 @@ def main() -> int:
     p.add_argument("--mix", type=float, default=0.0, help="Read fraction; 0 disables mix")
     p.add_argument("--write-path", default="")
     p.add_argument("--write-body", default="")
+    p.add_argument("--write-body-file", default="", help="Read mixed-write JSON body from a file")
     args = p.parse_args()
 
     base = args.base.rstrip("/")
+
+    body_text = (
+        Path(args.body_file).read_text(encoding="utf-8-sig").strip()
+        if args.body_file
+        else args.body
+    )
+    write_body_text = (
+        Path(args.write_body_file).read_text(encoding="utf-8-sig").strip()
+        if args.write_body_file
+        else args.write_body
+    )
+
     headers = {"Accept": "application/json", "User-Agent": "csce553-m2"}
-    if args.body or args.write_body:
+    if body_text or write_body_text:
         headers["Content-Type"] = "application/json"
     if args.token and not args.no_auth:
         headers["Authorization"] = f"Bearer {args.token}"
