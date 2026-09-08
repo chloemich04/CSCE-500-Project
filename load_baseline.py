@@ -133,9 +133,9 @@ def main() -> int:
         headers["Authorization"] = f"Bearer {args.token}"
 
     read_url = base + (args.path if args.path.startswith("/") else "/" + args.path)
-    body = args.body.encode() if args.body else None
+    body = body_text.encode() if body_text else None
     write_url = ""
-    write_body = args.write_body.encode() if args.write_body else None
+    write_body = write_body_text.encode() if write_body_text else None
     if args.mix > 0:
         wp = args.write_path or args.path
         write_url = base + (wp if wp.startswith("/") else "/" + wp)
