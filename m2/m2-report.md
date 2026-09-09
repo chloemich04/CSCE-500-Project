@@ -1,18 +1,17 @@
-# M2 — Baseline Performance Report
+# M2 — Baseline Performance
 
-**Project:** CSCE-500-Project — Mini Shop (Option B, e-commerce, video games)
-**Public URL:** https://csce-500-project.onrender.com
-**Repository:** https://github.com/chloemich04/CSCE-500-Project
-**Team:** Sabri Kahoul (Series H — hosted), Chloe (Series L — local)
-**Architecture (unchanged):** Browser / load generator → API → PostgreSQL
+**Mini Shop** (our M1 e-commerce app for video games) — CSCE 553.
+Public URL: https://csce-500-project.onrender.com · Repo: https://github.com/chloemich04/CSCE-500-Project
 
-> This is a CSCE 553 class baseline, not a production system. All data is fake.
+We split the load testing in two: **Sabri** ran the hosted tests (Series H, on the live Render URL), and **Chloe** ran the local tests (Series L, same code on localhost). The goal was to push our app until it slows down, find where it breaks, and explain why.
+
+*(This is a class baseline, not production — all the data is fake.)*
 
 ---
 
-## 1. Capacity model (worksheet)
+## 1. How much load are we even talking about?
 
-Filled in **before** any load test.
+Before touching the load tester, we tried to figure out how much traffic our app would actually get. A number of registered users isn't a workload on its own, so we looked up some real e-commerce benchmarks to make reasonable assumptions instead of guessing.
 
 ### Assumptions
 
@@ -45,16 +44,11 @@ Bandwidth   = Peak RPS × bytes_per_response × copies
 
 ---
 
-## 2. Predicted first limit (pre-measurement)
+## 2. What we thought would break first
 
-Architecture chain: Browser → **Render API (0.1 CPU)** → Supabase Postgres.
+Our setup is a chain: browser → API on Render → Postgres on Supabase. Before running anything, we bet that the **API on Render would give out first**. The free Render instance runs on 0.1 CPU (basically a tenth of a processor), so we figured that under load the requests would pile up there and the latency would blow up, while the database — which has way more room and only handles simple queries — would stay fine. We also expected the first request after the app sleeps to be really slow (cold start).
 
-**Prediction:** the first limit to saturate is the **Render free-tier API CPU**. Under
-concurrency, requests queue on that 0.1-CPU instance and p99 latency explodes before
-Postgres hits its connection or CPU limits (the DB has more compute and the queries are
-simple). Cold-start after idle dominates the first request.
-
-*(Committed before the sweeps — see `prediction.md` / git history.)*
+*(We wrote this down before measuring — see `prediction.md` / git history — so it's clear we didn't reverse-engineer it afterwards.)*
 
 ---
 
@@ -71,7 +65,7 @@ simple). Cold-start after idle dominates the first request.
 
 ---
 
-## 4. Results — Series H (hosted)
+## 4. Series H — testing the live app (Sabri)
 
 ### 4.1 Cold start (H only)
 First `GET /health` after > 15 min idle: **≈32.25 s** (single request, wall time). Confirms cold-start dominates the first request on Render free tier.
@@ -121,7 +115,7 @@ The mix p50 stays near read (294 ms), but p95/p99 (898/999 ms) approach the writ
 
 ---
 
-## 5. Results — Series L (local)  *[CHLOE TO FILL]*
+## 5. Series L — testing it locally (Chloe)
 
 > Same code/commit, API on localhost, same hosted Supabase. Local CPU is visible here — this is the direct CPU evidence the hosted side cannot show.
 
@@ -207,7 +201,7 @@ Both series show the same shape (throughput plateau + latency doubling at the kn
 
 ---
 
-## 7. Resource signals (aligned in time with the sweeps)
+## 7. What the machines were doing during the tests
 
 **Series H (hosted).** Render free tier does not expose API CPU/memory (paywalled; upgrading forbidden). Signals used:
 
@@ -224,40 +218,38 @@ Screenshots and timestamps in `m2/results/`.
 
 ---
 
-## 8. Bottleneck claim
+## 8. Were we right? (checking the prediction)
 
-**Bottleneck: Render free-tier API compute (0.1 CPU).** Two signals move together:
-1. Read-path throughput plateaus at ≈50 req/s from 16→32 VUs while p50 doubles (259→556 ms) at 0% errors — the signature of a compute queue, not failures; the write path saturates even earlier.
-2. During the same runs, Supabase is at 2% CPU, 14/60 connections, 1% disk IO — the DB has ample headroom.
+Short answer: yes, we were right — the bottleneck is the **API compute on Render (0.1 CPU)**. Two things line up to prove it:
+1. On the read path, throughput stops climbing at ≈50 req/s (16→32 VUs) while the p50 latency doubles (259→556 ms), and this happens with **zero errors**. That's what a compute queue looks like — requests waiting their turn, not failing.
+2. At the exact same time, the database is basically asleep: 2% CPU, 14 out of 60 connections used, 1% disk. It had tons of room left.
 
-By elimination in the Browser→Render→Postgres chain, the Render API compute is the limit. Series L confirms this directly: local CPU rises with load while the (shared) DB stays idle. This matches the pre-measurement prediction.
-
----
-
-## 9. Proposed SLO
-
-**Eligible events:** warm `GET /api/products` after login, excluding cold-start.
-
-**SLO:** *99% of eligible events complete within 900 ms, with error rate ≤ 1%, over the lab window.*
-
-**Basis:** at the last healthy stage (16 VUs) measured p99 = 587 ms at 0% errors; at 32 VUs p99 = 853 ms, still 0% errors. 900 ms leaves headroom above the healthy p99 while failing if pushed further.
-
-**Does H meet it?**
-- 16 VUs (healthy): p99 587 ms ≤ 900 ms, 0% errors → **PASS**.
-- 32 VUs (saturated): p99 853 ms ≤ 900 ms, 0% errors → **PASS** on pure reads, but throughput no longer scales.
-- Mix 80/20 @ 16 VUs: p99 999 ms > 900 ms → **FAIL**. Realistic mixed traffic breaches the SLO because the 20% writes inflate the tail.
-
-**Conclusion:** H meets the SLO for pure warm reads up to its ≈50 req/s ceiling, but a realistic read/write mix breaches it. The binding limit is the tail under mixed load.
+So by elimination in the browser → Render → Postgres chain, the only thing that could be the limit is the API compute. And Series L backs this up directly: on the local machine the CPU climbs with the load while the (shared) database stays idle. Prediction confirmed.
 
 ---
 
-## 10. Gap: predicted vs measured, and revised model
+## 9. Setting a target we can actually check
 
-**Predicted:** Render 0.1-CPU API is the first limit; DB keeps headroom; cold-start dominates the first request.
+Throughput alone can hide a bad experience, so we set ourselves one measurable promise. We only count **warm `GET /api/products` after login** (we don't count the cold-start request, that's not fair).
 
-**Measured:** confirmed. Read throughput plateaus at ≈50 req/s while p50 doubles, 0% errors; Supabase idle (2% CPU, 14/60 connections); cold-start ≈32 s. Right bottleneck. One refinement: the *write path and mix* degrade the tail earlier than the pure read sweep suggests, so the read-only knee (≈50 req/s) overstates real capacity.
+**Our target:** 99% of those requests should finish in under **900 ms**, with under 1% errors.
 
-**Revised model:**
+We picked 900 ms from our own numbers: at the last healthy stage (16 VUs) the p99 was 587 ms with no errors, and even at 32 VUs it was 853 ms — so 900 ms gives a bit of headroom but still fails if we push the app too far.
+
+Does the hosted app hold up?
+- At 16 VUs: p99 = 587 ms, 0 errors → **yes**.
+- At 32 VUs: p99 = 853 ms, 0 errors → still **yes** on pure reads (but it's not getting any faster).
+- With the realistic 80/20 mix at 16 VUs: p99 = 999 ms → **no**. The 20% of writes drag the tail over the limit.
+
+So the app meets our target for pure reads, but real mixed traffic breaks it. The thing that actually hurts is the tail once writes are in the picture.
+
+---
+
+## 10. Prediction vs reality, and scaling up
+
+What we guessed and what we measured basically match: the Render API is the first limit, the database keeps its headroom, and the cold start (≈32 s) dominates the first request. The one thing we learned along the way is that the **write path and the mix make the tail worse** than the read-only test suggested — so our ≈50 req/s ceiling is a bit optimistic once real writes are included.
+
+Now, scaling our capacity numbers against that measured ≈50 req/s ceiling:
 - **10K users (≈1.4 predicted RPS):** ≈35× below the measured ≈50 req/s read ceiling → ample headroom, not compute-bound on this architecture.
 - **1M users (≈139 RPS):** ≈3× above the measured ceiling → needs more than one 0.1-CPU instance (horizontal scaling / larger tier). DB still not the first thing to change.
 - **100M users (≈13,900 RPS):** ≈280× the ceiling → requires many API replicas behind a load balancer, a read-path cache, and DB read replicas/partitioning — the architecture must change (out of scope for M1/M2).
