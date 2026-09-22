@@ -16,7 +16,7 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.AZURE_VM_IP }}
-          username: ubuntu
+          username: azureuser
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /var/www/myapp
