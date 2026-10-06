@@ -5,7 +5,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Product, User
+from app.models import Category, Product, User
 from app.schemas import ProductCreate, ProductOut, ProductUpdate
 
 router = APIRouter(prefix="/api", tags=["products"])
@@ -44,6 +44,20 @@ def require_manager(user: User = Depends(get_current_user)):
     return user
 
 
+def sync_named_category(db: Session, product: Product) -> None:
+    """If products.category (text) is set, also link that name in the M2M table."""
+    if not product.category or not product.category.strip():
+        return
+    name = product.category.strip()
+    category = db.query(Category).filter(func.lower(Category.name) == name.lower()).first()
+    if category is None:
+        category = Category(name=name)
+        db.add(category)
+        db.flush()
+    if category not in product.categories:
+        product.categories.append(category)
+
+
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
 def create_product(
     payload: ProductCreate,
@@ -52,6 +66,8 @@ def create_product(
 ):
     product = Product(**payload.model_dump())
     db.add(product)
+    db.flush()
+    sync_named_category(db, product)
     db.commit()
     db.refresh(product)
     return product
@@ -71,6 +87,7 @@ def update_product(
     for key, value in payload.model_dump().items():
         setattr(product, key, value)
 
+    sync_named_category(db, product)
     db.commit()
     db.refresh(product)
     return product
@@ -96,6 +113,15 @@ def search_products(
         .order_by(Product.created_at.desc())
         .all()
     )
+
+
+@router.get("/products/{product_id}", response_model=ProductOut)
+def get_product(product_id: int, db: Session = Depends(get_db)):
+    """Query a single table (products) and return one row."""
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found.")
+    return product
 
 
 @router.get("/products", response_model=list[ProductOut])
