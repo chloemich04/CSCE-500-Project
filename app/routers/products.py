@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -95,12 +95,15 @@ def update_product(
 
 @router.get("/products/search", response_model=list[ProductOut])
 def search_products(
+    response: Response,
     q: str = Query(..., min_length=1),
+    page: int | None = Query(default=None, ge=1),
+    page_size: int = Query(default=12, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     search_term = f"%{q.lower()}%"
-    return (
+    query = (
         db.query(Product)
         .filter(
             or_(
@@ -110,9 +113,8 @@ def search_products(
                 func.lower(Product.platform).like(search_term),
             )
         )
-        .order_by(Product.created_at.desc())
-        .all()
     )
+    return paginate_products(query, response, page, page_size)
 
 
 @router.get("/products/{product_id}", response_model=ProductOut)
@@ -125,5 +127,25 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/products", response_model=list[ProductOut])
-def list_products(db: Session = Depends(get_db), current_user: User = Depends(get_current_user),):
-    return db.query(Product).order_by(Product.created_at.desc()).all()
+def list_products(
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    page: int | None = Query(default=None, ge=1),
+    page_size: int = Query(default=12, ge=1, le=100),
+):
+    return paginate_products(db.query(Product), response, page, page_size)
+
+
+def paginate_products(query, response: Response, page: int | None, page_size: int):
+    # Preserve the existing array response for API consumers without pagination.
+    query = query.order_by(Product.created_at.desc(), Product.id.desc())
+    if page is not None:
+        total = query.order_by(None).count()
+        pages = max(1, (total + page_size - 1) // page_size)
+        page = min(page, pages)
+        response.headers["X-Total-Count"] = str(total)
+        response.headers["X-Page"] = str(page)
+        response.headers["X-Total-Pages"] = str(pages)
+        query = query.offset((page - 1) * page_size).limit(page_size)
+    return query.all()

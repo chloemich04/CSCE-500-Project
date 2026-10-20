@@ -283,3 +283,16 @@ Run inventory regression checks with:
 
 The tests use an isolated SQLite database, including two overlapping checkouts.
 They do not connect to Supabase; PostgreSQL deployment verification remains separate.
+
+## Product pagination
+
+The Products page offers 6, 12 (default), 24, or 48 products per page, with
+Previous/Next navigation and result counts. Search and page-size changes reset
+to page 1; navigation retains the active search.
+
+Both `GET /api/products` and `GET /api/products/search?q=...` accept optional
+`page` (minimum 1) and `page_size` (1?100, default 12). With `page` supplied,
+results are limited in the database and the response headers include
+`X-Total-Count`, `X-Page`, and `X-Total-Pages`. Pages beyond the last page return
+the last available page. Without `page`, the existing full-array behavior is
+preserved for existing API consumers. No database migration is needed.
