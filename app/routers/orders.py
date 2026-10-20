@@ -3,7 +3,7 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, func, update
 from sqlalchemy.orm import Session, joinedload, relationship
 
 from app.database import Base, get_db
@@ -69,38 +69,50 @@ def checkout(db: Session = Depends(get_db), user: User = Depends(get_current_use
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty.")
 
-    total = Decimal("0")
-    order = Order(user_id=user.id, total=Decimal("0"), status="placed")
-    db.add(order)
-    db.flush()
+    try:
+        total = Decimal("0")
+        order = Order(user_id=user.id, total=Decimal("0"), status="placed")
+        db.add(order)
+        db.flush()
 
-    for cart_item in cart_items:
-        product = cart_item.product
-        if product is None:
-            raise HTTPException(status_code=400, detail="A cart item refers to a missing product.")
-        if product.stock is not None and cart_item.quantity > product.stock:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Not enough stock for '{product.name}'.",
+        # Use a stable product order to avoid deadlocks between multi-item checkouts.
+        for cart_item in sorted(cart_items, key=lambda item: item.product_id):
+            product = cart_item.product
+            if product is None:
+                raise HTTPException(status_code=400, detail="A cart item refers to a missing product.")
+            # Check and decrement in ONE database statement; never trust the stock
+            # loaded with the cart, which another checkout may already have changed.
+            reserved = db.execute(
+                update(Product)
+                .where(Product.id == product.id, Product.stock >= cart_item.quantity)
+                .values(stock=Product.stock - cart_item.quantity)
+                .execution_options(synchronize_session=False)
             )
+            if reserved.rowcount != 1:
+                name = product.name
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"'{name}' is out of stock or has insufficient stock. Please update your cart.",
+                )
 
-        price = Decimal(str(product.price))
-        db.add(
-            OrderItem(
-                order_id=order.id,
-                product_id=product.id,
-                quantity=cart_item.quantity,
-                price_at_order=price,
+            price = Decimal(str(product.price))
+            db.add(
+                OrderItem(
+                    order_id=order.id,
+                    product_id=product.id,
+                    quantity=cart_item.quantity,
+                    price_at_order=price,
+                )
             )
-        )
-        total += price * cart_item.quantity
-        if product.stock is not None:
-            product.stock -= cart_item.quantity
+            total += price * cart_item.quantity
 
-        db.delete(cart_item)
+            db.delete(cart_item)
 
-    order.total = total
-    db.commit()
+        order.total = total
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return serialize_order(_load_order(db, order.id))
 
 

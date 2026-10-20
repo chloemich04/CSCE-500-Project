@@ -51,6 +51,7 @@
     }
 
     list.innerHTML = products.map(function (product) {
+      const outOfStock = product.stock == null || product.stock <= 0;
       return `
         <article class="product-card">
           <h3>${product.name}</h3>
@@ -58,11 +59,11 @@
           <p>${product.description || "No description available."}</p>
           <div class="product-meta">
             <strong>$${Number(product.price).toFixed(2)}</strong>
-            <span>Stock: ${product.stock}</span>
+            <span>${outOfStock ? "Out of stock" : "Stock: " + product.stock}</span>
           </div>
           <div class="product-actions">
-            <input type="number" class="qty-input" min="1" max="${product.stock || 100}" value="1" data-product-id="${product.id}" />
-            <button type="button" class="add-to-cart-btn" data-product-id="${product.id}">Add to Cart</button>
+            <input type="number" class="qty-input" min="1" max="${Math.max(1, product.stock || 0)}" ${outOfStock ? "disabled" : ""} value="1" data-product-id="${product.id}" />
+            <button type="button" class="add-to-cart-btn" data-product-id="${product.id}" ${outOfStock ? "disabled" : ""}>${outOfStock ? "Out of stock" : "Add to Cart"}</button>
           </div>
         </article>
       `;
@@ -156,7 +157,7 @@
       <div class="cart-total">
         <strong>Total: $${Number(cart.total).toFixed(2)}</strong>
       </div>
-      <button type="button" class="checkout-btn">Proceed to Checkout</button>`;
+      <a href="/cart">Proceed to Checkout</a>`;
 
     cartDisplay.innerHTML = html;
   }

@@ -106,6 +106,7 @@ def serialize_cart(cart: Cart) -> dict:
                 "name": item.product.name,
                 "price": _money(price),
                 "quantity": item.quantity,
+                "stock": item.product.stock,
                 "line_total": _money(line),
             }
         )

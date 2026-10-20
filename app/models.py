@@ -1,6 +1,6 @@
 """SQLAlchemy table mapping and product model."""
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Table, func
+from sqlalchemy import CheckConstraint, Column, DateTime, Float, ForeignKey, Integer, String, Table, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -33,6 +33,7 @@ class Category(Base):
 
 class Product(Base):
     __tablename__ = "products"
+    __table_args__ = (CheckConstraint("stock >= 0", name="products_stock_nonnegative"),)
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
