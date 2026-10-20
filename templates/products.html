@@ -4,10 +4,25 @@
 <section class="card">
   <h1>Products</h1>
   <div class="toolbar">
-    <input id="search-input" type="text" placeholder="Search products..." />
+    <input aria-label="Search products" id="search-input" type="text" placeholder="Search products..." />
     <button id="search-btn" type="button">Search</button>
   </div>
+  <div class="catalog-options">
+    <label for="page-size">Products per page</label>
+    <select id="page-size">
+      <option value="6">6</option>
+      <option value="12" selected>12</option>
+      <option value="24">24</option>
+      <option value="48">48</option>
+    </select>
+  </div>
+  <p id="products-summary" class="muted" role="status" aria-live="polite"></p>
   <div id="products-list" class="product-grid"></div>
+  <nav class="pagination" aria-label="Product pages" hidden>
+    <button id="previous-page" type="button" disabled>Previous</button>
+    <span id="page-info"></span>
+    <button id="next-page" type="button" disabled>Next</button>
+  </nav>
 </section>
 
 <section class="card" style="margin-top: 2rem;">
@@ -22,33 +37,60 @@
     return localStorage.getItem("access_token");
   }
 
-  async function loadProducts(query = "") {
-    const url = query ? `/api/products/search?q=${encodeURIComponent(query)}` : "/api/products";
+  let currentPage = 1;
+  let activeQuery = "";
+  let productRequest = 0;
+
+  async function loadProducts(query = activeQuery, page = currentPage, scrollToResults = false) {
+    activeQuery = query;
+    const request = ++productRequest;
+    const pageSize = Number(document.getElementById("page-size").value);
+    const params = new URLSearchParams({ page, page_size: pageSize });
+    if (query) params.set("q", query);
+    const url = (query ? "/api/products/search" : "/api/products") + "?" + params;
     const list = document.getElementById("products-list");
+    const summary = document.getElementById("products-summary");
+    const navigation = document.querySelector(".pagination");
+    const previous = document.getElementById("previous-page");
+    const next = document.getElementById("next-page");
+    previous.disabled = true;
+    next.disabled = true;
+    navigation.hidden = true;
+    summary.textContent = "Loading products...";
+    list.innerHTML = "";
     const token = getToken();
 
     if (!token) {
-      list.innerHTML = '<p class="muted">Please log in to view products.</p>';
+      summary.textContent = "Please log in to view products.";
       return;
     }
 
-    const res = await fetch(url, {
-      headers: {
-        "Authorization": `Bearer ${token}`,
-      },
-    });
-
-    if (!res.ok) {
-      list.innerHTML = '<p class="error">Unable to load products. Please log in again.</p>';
+    let products;
+    try {
+      const res = await fetch(url, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Unable to load products. Please try again or log in again.");
+      products = await res.json();
+      // A slower previous search must not overwrite newer results.
+      if (request !== productRequest) return;
+      const total = Number(res.headers.get("X-Total-Count"));
+      const pages = Number(res.headers.get("X-Total-Pages"));
+      currentPage = Number(res.headers.get("X-Page"));
+      document.getElementById("page-info").textContent = `Page ${currentPage} of ${pages}`;
+      previous.disabled = currentPage <= 1;
+      next.disabled = currentPage >= pages;
+      navigation.hidden = total === 0;
+      const start = (currentPage - 1) * pageSize + 1;
+      summary.textContent = total === 0 ? "No products found." :
+        `Showing ${start}-${start + products.length - 1} of ${total} products`;
+    } catch (error) {
+      if (request !== productRequest) return;
+      summary.textContent = error.message;
       return;
     }
 
-    const products = await res.json();
-
-    if (!Array.isArray(products) || products.length === 0) {
-      list.innerHTML = '<p class="muted">No products found.</p>';
-      return;
-    }
+    if (products.length === 0) return;
 
     list.innerHTML = products.map(function (product) {
       const outOfStock = product.stock == null || product.stock <= 0;
@@ -68,6 +110,11 @@
         </article>
       `;
     }).join("");
+
+    if (scrollToResults) {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      summary.scrollIntoView({ behavior: reduceMotion ? "instant" : "smooth", block: "start" });
+    }
 
     // Attach event listeners to all "Add to Cart" buttons
     document.querySelectorAll(".add-to-cart-btn").forEach(function (btn) {
@@ -164,14 +211,24 @@
 
   document.getElementById("search-btn").addEventListener("click", function () {
     const query = document.getElementById("search-input").value.trim();
-    loadProducts(query);
+    loadProducts(query, 1);
   });
 
   document.getElementById("search-input").addEventListener("keydown", function (event) {
     if (event.key === "Enter") {
       const query = document.getElementById("search-input").value.trim();
-      loadProducts(query);
+      loadProducts(query, 1);
     }
+  });
+
+  document.getElementById("page-size").addEventListener("change", function () {
+    loadProducts(activeQuery, 1);
+  });
+  document.getElementById("previous-page").addEventListener("click", function () {
+    loadProducts(activeQuery, currentPage - 1, true);
+  });
+  document.getElementById("next-page").addEventListener("click", function () {
+    loadProducts(activeQuery, currentPage + 1, true);
   });
 
   loadProducts();
