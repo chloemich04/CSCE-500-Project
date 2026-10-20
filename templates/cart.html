@@ -66,12 +66,13 @@
     empty.hidden = true;
     table.hidden = false;
     checkoutBtn.hidden = false;
+    checkoutBtn.disabled = data.items.some(item => item.stock == null || item.quantity > item.stock);
     data.items.forEach(function (item) {
       const tr = document.createElement("tr");
       tr.innerHTML =
-        "<td>" + item.name + "</td>" +
+        "<td>" + item.name + (item.stock <= 0 ? " (Out of stock)" : item.quantity > item.stock ? " (Insufficient stock)" : "") + "</td>" +
         "<td>$" + Number(item.price).toFixed(2) + "</td>" +
-        '<td><input class="qty-input" type="number" min="1" value="' + item.quantity + '" data-id="' + item.id + '" /></td>' +
+        '<td><input class="qty-input" type="number" min="1" max="' + Math.max(1, item.stock || 0) + '" value="' + item.quantity + '" data-id="' + item.id + '" /></td>' +
         "<td>$" + Number(item.line_total).toFixed(2) + "</td>" +
         '<td><button type="button" class="secondary remove-btn" data-id="' + item.id + '">Remove</button></td>';
       body.appendChild(tr);

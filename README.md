@@ -261,3 +261,25 @@ schema.sql               SQL to run in Supabase (users + products + cart/orders)
 - The browser never talks to Supabase directly. Only the Python API uses `DATABASE_URL`.
 - **Not a production system. Fake data only.**
 
+
+## Inventory safety
+
+Checkout reserves stock with a conditional database update (`stock >= quantity`)
+inside the same transaction as the order and cart removal. Competing buyers cannot
+both buy the last unit. Insufficient stock returns HTTP 409 and rolls back the
+entire checkout; the cart stays intact. Adding to a cart does not reserve stock.
+
+For an existing Supabase database, run `migrations/001_stock_nonnegative.sql`
+in the SQL Editor. Review and correct any negative or null stock using verified
+inventory counts first. Run the constraint statements once; if the named constraint
+already exists, it does not need adding again. Creating tables at startup or
+rerunning `schema.sql` does not alter an existing table's constraints.
+
+Run inventory regression checks with:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+The tests use an isolated SQLite database, including two overlapping checkouts.
+They do not connect to Supabase; PostgreSQL deployment verification remains separate.
