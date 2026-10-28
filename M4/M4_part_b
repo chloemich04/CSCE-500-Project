@@ -1,0 +1,233 @@
+# CSCE 553 Mini Shop Database Indexing Performance Report
+
+*SQL execution plans and HTTP benchmark evaluation*
+
+Prepared for the course instructor and Mini Shop project team
+27 October 2026
+
+## 1 Findings and scope
+
+Two targeted indexes are justified as candidates for the order retrieval workload. The reported warmed standalone orders SQL execution time fell from approximately 5.97 ms to 1.19 ms, while the order-items join changed from a full scan and hash join to indexed lookups. The HTTP experiments show a smaller observed difference and do not establish a causal effect or a proven minimum index set.
+
+The no-new-index baseline has one run. The both-index configuration has three runs, whose orders p95 values are 2.83, 2.60 and 2.27 seconds. Their arithmetic mean is 2.567 seconds, 13.3% below the single baseline value of 2.96 seconds. Every measured endpoint p95 remains above the 200 ms target.
+
+## 2 Experiment design
+
+| Configuration | Orders index | Items index | Runs |
+| --- | --- | --- | --- |
+| A baseline | Absent | Absent | 1 |
+| B orders only | Present | Absent | 1 |
+| C items only | Absent | Present | 1 |
+| D both | Present | Present | 3 |
+
+Baseline means neither experimental index is installed; primary-key, unique and other existing indexes are retained. The workload uses the same five endpoint categories, a local Uvicorn application with a FastAPI backend, and remote Supabase PostgreSQL. k6 reports 8 virtual users and a 60-second scenario; wall-clock totals include completion time beyond the scenario duration.
+
+Reported scale is approximately 5,000 products, 60,000 orders and 148,000 order items. These counts describe the experiment context rather than a newly verified database snapshot. The exact application revision, machine specification, database tier, region and cache state should be recorded in a follow-up replication.
+
+## 3 SQL analysis and index rationale
+
+The composite B-tree index on orders(user_id, created_at DESC) aligns with equality filtering by user_id and descending creation-time ordering. The order_items(order_id) index supports lookup of items for selected orders. These indexes address separate stages of order retrieval.
+
+![Plans](assets/plans.png)
+
+*Figure 1. Schematic orders plan reconstruction from the recorded findings. These are operator summaries, not verbatim EXPLAIN output or complete plan trees.*
+
+| Warmed standalone orders SQL | Before | After |
+| --- | --- | --- |
+| Reported execution time | 5.97 ms | 1.19 ms |
+| Observed reduction | 4.78 ms | 80.1% |
+
+The timing ratio is approximately 5.0 times, calculated as 5.97 / 1.19. These values describe the standalone SQL experiment; they are not HTTP percentiles, repeated-run averages or a measured full-endpoint speedup.
+
+### Order items join plan
+
+```text
+Before   selected orders + sequential scan of order_items
+         -> hash join -> joined rows
+
+After    selected orders -> indexed order_items lookups
+         -> joined rows
+```
+
+This second schematic records the reported shift in access and join strategy. Exact join node names, row counts, buffer statistics and a separate numeric join timing are not established by these summaries. No additional join speedup is assigned.
+
+Earlier analysis described product and category SQL as relatively inexpensive. There is no quantified case here for additional product or category indexes. Each extra index would also need an assessment of storage and write maintenance cost.
+
+## 4 HTTP benchmark results
+
+Table 1 reports seconds. A, B and C each contain a single run; D is the mean of three per-run p95 measurements. It is not the p95 of pooled requests. Overall HTTP is k6 http_req_duration across the request mix, not the mean of endpoint p95s.
+
+p95 is the 95th percentile: approximately 95% of measured request durations are at or below this value. It describes the slow tail rather than the average response.
+
+| Endpoint | A n 1 | B n 1 | C n 1 | D n 3 mean |
+| --- | --- | --- | --- | --- |
+| Single product | 2.000 | 1.060 | 1.310 | 1.000 |
+| Product list | 5.810 | 1.960 | 1.920 | 2.147 |
+| Sports category | 1.360 | 1.190 | 1.010 | 1.217 |
+| Games category | 1.810 | 1.920 | 1.350 | 1.633 |
+| Orders | 2.960 | 2.880 | 3.240 | 2.567 |
+| Overall HTTP | 2.810 | 2.210 | 2.350 | 2.177 |
+
+![Orders](assets/orders.png)
+
+*Figure 2. Orders HTTP p95 by configuration. Black points show the three D runs; they are not confidence bounds. The dashed line marks 0.200 seconds.*
+
+B is 2.7% below A, while C is 9.5% above A. D has the lowest displayed mean, but A to D differs by 0.393 seconds, less than the 0.560-second range among the D runs themselves. These observations support additional balanced testing rather than a causal ranking of index configurations.
+
+## 5 Repeated runs and workload totals
+
+| Endpoint p95 in seconds | D run 1 | D run 2 | D run 3 | Mean |
+| --- | --- | --- | --- | --- |
+| Single product | 1.020 | 1.030 | 0.949 | 1.000 |
+| Product list | 2.120 | 2.180 | 2.140 | 2.147 |
+| Sports category | 1.300 | 1.220 | 1.130 | 1.217 |
+| Games category | 1.580 | 1.760 | 1.560 | 1.633 |
+| Orders | 2.830 | 2.600 | 2.270 | 2.567 |
+| Overall HTTP | 2.410 | 2.150 | 1.970 | 2.177 |
+
+| Run | Requests | Iterations | Req per sec | Failures |
+| --- | --- | --- | --- | --- |
+| A | 386 | 77 | 5.792 | 0% |
+| B | 466 | 93 | 7.005 | 0% |
+| C | 461 | 92 | 6.774 | 0% |
+| D1 | 436 | 87 | 6.39 | 0% |
+| D2 | 456 | 91 | 6.912 | 0% |
+| D3 | 481 | 96 | 7.383 | 0% |
+
+All reported endpoint status checks passed. Check counts and request totals differ by one in the displayed summaries; the additional request should not be assigned to a particular endpoint without the test script. Passing HTTP status checks establishes response status success, not full business-data correctness.
+
+The later pasted message labels its two additional D tests as “first run” and “run 2.” This report normalizes them to D2 and D3 after the initial indexed measurement D1. The exact D3 single-product p95 is 949.06 ms; the earlier comparison rounded it to 0.949 seconds.
+
+D1 values are preserved from the conversation’s benchmark comparison; D2, D3, A, B and C also have pasted k6 summaries. Requests per second are the reported rates, including their reporting interval, rather than counts divided by the nominal 60-second scenario. No raw request-level dataset is available for pooled percentile or confidence-interval calculations.
+
+### Threats to interpretation
+
+Unequal repetition, uncontrolled cache warming, background load and remote database conditions can confound the comparison. Orders p95 and overall p95 both fall across D1 to D3, which is compatible with warming or changing conditions. A single A, B or C result cannot quantify its configuration’s normal run-to-run variability.
+
+## 6 Why HTTP p95 exceeds 200 ms
+
+![Endpoints](assets/endpoints.png)
+
+*Figure 3. Baseline and both-index mean p95 across endpoints. Changes in product endpoints are not directly explained by the two order-related indexes.*
+
+The both-index endpoint means range from 1.000 to 2.567 seconds, approximately 5.0 to 12.8 times the 200 ms target. Even the fastest individual both-index endpoint p95, 949.06 ms for a single product, is about 4.75 times the target. None of the recorded configurations meets the target for any of the five endpoint p95s.
+
+A 1.19 ms SQL execution time measures one database operation. An HTTP request can include remote database communication, multiple queries, retrieval of items and product details, application processing, JSON serialization and response transfer. k6 http_req_duration includes sending, waiting and receiving; it excludes the initial DNS lookup and connection setup [2]. These measurement boundaries prevent treating SQL time as the full request cost.
+
+The unpaginated product-list endpoint reportedly returns 5,000 products. Indexed runs received about 237 to 261 MB in aggregate, consistent with a substantial response workload. Aggregate bytes do not isolate which endpoint or phase dominates. Payload size, remote round trips and application work are plausible contributors, not measured causal explanations.
+
+The 4.78 ms SQL difference cannot simply be subtracted from an HTTP p95. The observations come from different executions and statistical summaries; the endpoint may execute several SQL statements. Instrumentation is needed to attribute time.
+
+### Recommended next measurements
+
+Record per-request database call count, database spans, serialization time, response bytes and k6 waiting versus receiving time. Test pagination and a smaller response projection separately. Repeat all four index configurations equally, randomize or interleave order, and use the same warm-up protocol and fixed dataset. Report per-run p95 distributions before claiming a minimum index set.
+
+## 7 Reproduction procedure
+
+Use the existing Mini Shop repository, its original M4 test script and the same test data. Keep the application’s established Uvicorn launch command, host, port, credentials and endpoint inputs unchanged. The commands below preserve the recorded benchmark entry point and add result capture for future runs.
+
+```powershell
+New-Item -ItemType Directory -Force .\M5\results
+k6 version
+k6 run .\M4\M4-test.js
+```
+
+For a new captured run, set the label to the configuration and repetition actually installed. Exporting request metrics enables later percentile recomputation; keep output artifacts separate from historical results.
+
+```powershell
+$runLabel = "A-r1"
+k6 run --out "json=.\M5\results\$runLabel.json" `
+  .\M4\M4-test.js 2>&1 |
+  Tee-Object ".\M5\results\$runLabel.txt"
+```
+
+Before each run, select A, B, C or D using the appendix scripts and verify the actual index definitions. Run a consistent, separately recorded warm-up that is excluded from measured results. Repeat each configuration at least three times in an interleaved schedule, retaining the same 8-VU, 60-second scenario and all other test settings. This is a proposed stronger protocol, not the design of the historical six runs.
+
+### Capture SQL plans
+
+Use the real user ID and the application’s exact query shape, including projection, joins, predicates, ordering and pagination. Run each plan in the same database role as the application when practical. Save the complete plan and note cache state, row counts and buffer statistics. EXPLAIN ANALYZE executes the SELECT; conduct the index changes in the benchmark environment.
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+SELECT ...; -- insert the exact application SELECT
+```
+
+The included explain templates illustrate the two index access patterns. They are not archived application SQL and may produce different plans or timings. The :user_id notation in the file is a psql variable; replace it with a correctly typed literal when using Supabase SQL Editor.
+
+### Replication record
+
+Record application commit, dependency versions, machine and operating system, database version and tier, client and database regions, row counts, existing indexes, user IDs, endpoint parameters, warm-up sequence, run order, timestamps and the unchanged M4 script. After testing, restore the selected indexes with script 01 and verify with script 03.
+
+## Appendix A SQL scripts
+
+These scripts reproduce index states without touching unrelated indexes. IF NOT EXISTS checks the object name; verify indexdef to confirm its columns and order. Keep primary-key and unique indexes intact.
+
+### 01 create indexes
+
+```sql
+-- Configuration D. Run in the benchmark database.
+CREATE INDEX IF NOT EXISTS idx_orders_user_created
+ON public.orders (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id
+ON public.order_items (order_id);
+```
+
+### 02 drop experimental indexes
+
+```sql
+-- Configuration A. Remove only the experimental indexes.
+DROP INDEX IF EXISTS public.idx_orders_user_created;
+DROP INDEX IF EXISTS public.idx_order_items_order_id;
+```
+
+### 03 verify indexes
+
+```sql
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND indexname IN ('idx_orders_user_created',
+                    'idx_order_items_order_id')
+ORDER BY tablename, indexname;
+```
+
+### Single index configuration commands
+
+For B, drop only idx_order_items_order_id and create the orders index. For C, drop only idx_orders_user_created and create the items index. The accompanying script 05 contains both sections; execute only the desired section, then verify. Running the entire file leaves configuration C.
+
+### Index selection conclusion
+
+Retain both as targeted candidates supported by the reported SQL access-path changes. The current HTTP experiment does not prove that two indexes are the minimum necessary or that either delivers a stable end-to-end gain. The 200 ms HTTP p95 objective remains unmet. Further optimization should be guided by request-level timing and balanced repetitions.
+
+## Appendix B Explain templates and sources
+
+```sql
+-- Representative templates, not archived application queries.
+-- Replace :user_id using psql -v user_id=... with a real test user.
+-- Match the application's projection, predicates and LIMIT first.
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+SELECT o.* FROM public.orders AS o
+WHERE o.user_id = :'user_id'
+ORDER BY o.created_at DESC;
+
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+SELECT o.id, oi.*
+FROM public.orders AS o
+JOIN public.order_items AS oi ON oi.order_id = o.id
+WHERE o.user_id = :'user_id'
+ORDER BY o.created_at DESC;
+```
+
+To reproduce the historical SQL result faithfully, replace the representative templates with the original application SELECT statements and parameters before comparing plans. Do not attach the historical 5.97 ms and 1.19 ms values to a newly modified query.
+
+### Evidence and calculation notes
+
+[1] Analyze Query Performance, project conversation 6ae14cb2-5744-83e9-83da-a45f4966208b. Benchmark summaries and recorded SQL findings. The detailed 5.97 ms and 1.19 ms timings and plan changes are reported in that conversation; the diagrams summarize those findings rather than reproducing raw plan captures.
+
+[2] Grafana k6 documentation, Built-in metrics. Metric definitions for http_req_duration, requests, checks and data received. https://grafana.com/docs/k6/latest/using-k6/metrics/reference/ (accessed 27 October 2026).
+
+D mean = (D1 + D2 + D3) / 3 for each endpoint. Observed reduction relative to A = 100 × (A − D mean) / A. SQL reduction = 100 × (5.97 − 1.19) / 5.97 = 80.1%. Orders HTTP reduction = 13.3%; overall HTTP reduction = 22.5%. These are descriptive differences, not causal estimates.
+
+### Supporting files
+
+benchmark_summary.csv contains all six run-level p95 records and request totals. The sql folder contains the index creation, removal, verification, single-index configuration and representative EXPLAIN scripts. Chart PNGs are included for reuse; tables, prose and code in this Word report remain editable.
