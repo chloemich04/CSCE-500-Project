@@ -16,6 +16,7 @@
       <option value="48">48</option>
     </select>
   </div>
+  <p id="search-facets" class="muted" hidden></p>
   <p id="products-summary" class="muted" role="status" aria-live="polite"></p>
   <div id="products-list" class="product-grid"></div>
   <nav class="pagination" aria-label="Product pages" hidden>
@@ -39,15 +40,36 @@
 
   let currentPage = 1;
   let activeQuery = "";
+  let activeCategory = "";
   let productRequest = 0;
 
+  // Category facets
+  function renderFacets(facets) {
+    const box = document.getElementById("search-facets");
+    box.hidden = !activeQuery || facets.length === 0;
+    const link = (name, label) =>
+      `<a href="#" data-category="${name}"${name === activeCategory ? ' style="font-weight:bold"' : ""}>${label}</a>`;
+    box.innerHTML = "Category: " + [link("", "All")].concat(
+      facets.map((f) => link(f.category || "", `${f.category || "Uncategorized"} (${f.n})`))
+    ).join(" · ");
+    box.querySelectorAll("a").forEach(function (a) {
+      a.addEventListener("click", function (event) {
+        event.preventDefault();
+        activeCategory = a.dataset.category;
+        loadProducts(activeQuery, 1);
+      });
+    });
+  }
+
   async function loadProducts(query = activeQuery, page = currentPage, scrollToResults = false) {
+    if (query !== activeQuery) activeCategory = "";
     activeQuery = query;
     const request = ++productRequest;
     const pageSize = Number(document.getElementById("page-size").value);
     const params = new URLSearchParams({ page, page_size: pageSize });
     if (query) params.set("q", query);
-    const url = (query ? "/api/products/search" : "/api/products") + "?" + params;
+    if (query && activeCategory) params.set("category", activeCategory);
+    const url = (query ? "/api/search" : "/api/products") + "?" + params;
     const list = document.getElementById("products-list");
     const summary = document.getElementById("products-summary");
     const navigation = document.querySelector(".pagination");
@@ -74,6 +96,8 @@
       products = await res.json();
       // A slower previous search must not overwrite newer results.
       if (request !== productRequest) return;
+      renderFacets(query ? products.facets : []);
+      if (query) products = products.results;
       const total = Number(res.headers.get("X-Total-Count"));
       const pages = Number(res.headers.get("X-Total-Pages"));
       currentPage = Number(res.headers.get("X-Page"));
