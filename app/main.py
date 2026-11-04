@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.routers import auth, products, cart, orders, categories
+from app.routers import auth, products, cart, orders, categories, search
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -22,6 +22,7 @@ app.include_router(products.router)
 app.include_router(cart.router)
 app.include_router(orders.router)
 app.include_router(categories.router)
+app.include_router(search.router)
 
 
 @app.get("/health")
