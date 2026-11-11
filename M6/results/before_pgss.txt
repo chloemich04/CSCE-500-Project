@@ -1,0 +1,17 @@
+=== shard_0 / single (us-west-2)
+  calls  total_ms  mean_ms    rows  query
+    983      6293     6.40     983  SELECT checkout($1)
+   1966       347     0.18    1966  INSERT INTO cart_items (id, user_id, product_id, quantity) VALUES ($1::UUID, $2::UUID, $3:
+   2949       151     0.05    4915  SELECT cart_items.id AS cart_items_id, cart_items.user_id AS cart_items_user_id, cart_item
+   2949        86     0.03    2949  SELECT products.id, products.name, products.description, products.category, products.platf
+    983        63     0.06    1966  SELECT anon_1.orders_id AS anon_1_orders_id, anon_1.orders_user_id AS anon_1_orders_user_i
+    983        61     0.06     983  UPDATE cart_items SET quantity=$1::INTEGER WHERE cart_items.id = $2::UUID
+    120        47     0.39     120  SELECT users.id, users.email, users.password_hash, users.account_type, users.created_at FR
+   1966        28     0.01       0  SELECT cart_items.id AS cart_items_id, cart_items.user_id AS cart_items_user_id, cart_item
+    120        25     0.21     120  SELECT user_directory.email, user_directory.user_id FROM user_directory WHERE user_directo
+    983        22     0.02     983  SELECT cart_items.id AS cart_items_id, cart_items.user_id AS cart_items_user_id, cart_item
+=== shard_1 (us-east-1)
+  calls  total_ms  mean_ms    rows  query
+     12        10     0.87      12  SELECT * FROM pgbouncer.get_auth($1)
+     20         0     0.01      20  select $1
+      1         0     0.02       0  DISCARD ALL

@@ -1,4 +1,6 @@
 import unittest
+import uuid
+from types import SimpleNamespace
 from datetime import datetime
 
 from fastapi import Response
@@ -18,7 +20,7 @@ class ProductPaginationTests(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         self.db = Session(self.engine)
         for i in range(1, 16):
-            self.db.add(Product(id=i, name=f"Game {i}", price=10, stock=1,
+            self.db.add(Product(id=uuid.UUID(int=i), name=f"Game {i}", price=10, stock=1,
                                 category="Adventure" if i % 2 else "Puzzle",
                                 created_at=datetime(2026, 1, 1)))
         self.db.commit()
@@ -29,28 +31,28 @@ class ProductPaginationTests(unittest.TestCase):
 
     def listing(self, page, size):
         response = Response()
-        items = list_products(response=response, db=self.db, current_user=None,
+        items = list_products(response=response, current_user=SimpleNamespace(db=self.db),
                               page=page, page_size=size)
         return items, response.headers
 
     def searching(self, query, page, size):
         response = Response()
-        items = search_products(response=response, q=query, db=self.db,
-                                current_user=None, page=page, page_size=size)
+        items = search_products(response=response, q=query,
+                                current_user=SimpleNamespace(db=self.db), page=page, page_size=size)
         return items, response.headers
 
     def test_pages_have_stable_order_without_overlap(self):
         first, headers = self.listing(1, 6)
         second, _ = self.listing(2, 6)
         last, _ = self.listing(3, 6)
-        self.assertEqual([p.id for p in first + second + last], list(range(15, 0, -1)))
+        self.assertEqual([p.id.int for p in first + second + last], list(range(15, 0, -1)))
         self.assertEqual(headers["X-Total-Count"], "15")
         self.assertEqual(headers["X-Total-Pages"], "3")
 
     def test_search_paginates_only_matching_products(self):
         first, headers = self.searching("ADVENTURE", 1, 6)
         last, _ = self.searching("ADVENTURE", 2, 6)
-        self.assertEqual([p.id for p in first + last], list(range(15, 0, -2)))
+        self.assertEqual([p.id.int for p in first + last], list(range(15, 0, -2)))
         self.assertEqual(headers["X-Total-Count"], "8")
         self.assertEqual(headers["X-Total-Pages"], "2")
 

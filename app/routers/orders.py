@@ -1,43 +1,22 @@
-"""Order JSON API: checkout from cart (no real payment) and order history."""
+"""Order JSON API: checkout from cart (no real payment) and order history.
+
+M6: checkout is ONE local transaction on the user's shard. On Postgres it calls the
+stored procedure checkout(p_user) (M6/sql/01_shard_schema.sql); on SQLite (tests) the
+same steps run through the ORM in place_order().
+"""
 
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, func, update
-from sqlalchemy.orm import Session, joinedload, relationship
+from sqlalchemy import text, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import Session, joinedload
 
-from app.database import Base, get_db
-from app.models import User
-from app.routers.cart import Product, get_current_user, load_cart, _money
-
-# Product is imported so SQLAlchemy can resolve OrderItem.product.
-_ = Product
+from app.auth import CurrentUser, get_current_user
+from app.models import CartItem, Order, OrderItem, Product
+from app.routers.cart import _money, load_cart
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
-
-
-class Order(Base):
-    __tablename__ = "orders"
-
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    total = Column(Numeric, nullable=False)
-    status = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    items = relationship("OrderItem", back_populates="order")
-
-
-class OrderItem(Base):
-    __tablename__ = "order_items"
-
-    id = Column(Integer, primary_key=True)
-    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    quantity = Column(Integer, nullable=False)
-    price_at_order = Column(Numeric, nullable=False)
-
-    order = relationship("Order", back_populates="items")
-    product = relationship("Product")
 
 
 def serialize_order(order: Order) -> dict:
@@ -45,8 +24,8 @@ def serialize_order(order: Order) -> dict:
     for item in order.items:
         items.append(
             {
-                "id": item.id,
-                "product_id": item.product_id,
+                "id": str(item.id),
+                "product_id": str(item.product_id),
                 "name": item.product.name if item.product else None,
                 "quantity": item.quantity,
                 "price_at_order": _money(item.price_at_order),
@@ -54,7 +33,7 @@ def serialize_order(order: Order) -> dict:
             }
         )
     return {
-        "id": order.id,
+        "id": str(order.id),
         "total": _money(order.total),
         "status": order.status,
         "created_at": order.created_at.isoformat() if order.created_at else None,
@@ -62,26 +41,20 @@ def serialize_order(order: Order) -> dict:
     }
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-def checkout(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    cart = load_cart(db, user.id)
-    cart_items = list(cart.items)
+def place_order(db: Session, user_id):
+    """ORM version of checkout(p_user): same steps, same single transaction."""
+    cart_items = load_cart(db, user_id)
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty.")
-
     try:
         total = Decimal("0")
-        order = Order(user_id=user.id, total=Decimal("0"), status="placed")
+        order = Order(user_id=user_id, total=Decimal("0"), status="placed")
         db.add(order)
         db.flush()
-
-        # Use a stable product order to avoid deadlocks between multi-item checkouts.
-        for cart_item in sorted(cart_items, key=lambda item: item.product_id):
+        # Stable product order (load_cart sorts by product_id) avoids deadlocks.
+        for cart_item in cart_items:
             product = cart_item.product
-            if product is None:
-                raise HTTPException(status_code=400, detail="A cart item refers to a missing product.")
-            # Check and decrement in ONE database statement; never trust the stock
-            # loaded with the cart, which another checkout may already have changed.
+            # Check and decrement in ONE statement; this shard's stock allocation only.
             reserved = db.execute(
                 update(Product)
                 .where(Product.id == product.id, Product.stock >= cart_item.quantity)
@@ -89,49 +62,67 @@ def checkout(db: Session = Depends(get_db), user: User = Depends(get_current_use
                 .execution_options(synchronize_session=False)
             )
             if reserved.rowcount != 1:
-                name = product.name
                 raise HTTPException(
                     status_code=409,
-                    detail=f"'{name}' is out of stock or has insufficient stock. Please update your cart.",
+                    detail=f"'{product.name}' is out of stock or has insufficient stock. Please update your cart.",
                 )
-
             price = Decimal(str(product.price))
-            db.add(
-                OrderItem(
-                    order_id=order.id,
-                    product_id=product.id,
-                    quantity=cart_item.quantity,
-                    price_at_order=price,
-                )
-            )
+            db.add(OrderItem(user_id=user_id, order_id=order.id, product_id=product.id,
+                             quantity=cart_item.quantity, price_at_order=price))
             total += price * cart_item.quantity
-
             db.delete(cart_item)
-
         order.total = total
         db.commit()
     except Exception:
         db.rollback()
         raise
-    return serialize_order(_load_order(db, order.id))
+    return order.id
 
 
-def _load_order(db: Session, order_id: int) -> Order:
+def _checkout_procedure(db: Session, user_id):
+    try:
+        order_id = db.execute(text("SELECT checkout(:u)"), {"u": user_id}).scalar_one()
+        db.commit()
+        return order_id
+    except DBAPIError as exc:
+        db.rollback()
+        msg = getattr(getattr(exc.orig, "diag", None), "message_primary", "") or str(exc.orig)
+        if msg.startswith("cart is empty"):
+            raise HTTPException(status_code=400, detail="Cart is empty.")
+        if msg.startswith("out of stock"):
+            raise HTTPException(status_code=409, detail=msg + ". Please update your cart.")
+        raise
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def checkout(user: CurrentUser = Depends(get_current_user)):
+    db = user.db
+    if db.get_bind().dialect.name == "postgresql":
+        order_id = _checkout_procedure(db, user.id)
+    else:
+        order_id = place_order(db, user.id)
+    return serialize_order(_load_order(db, user.id, order_id))
+
+
+def _load_order(db: Session, user_id, order_id) -> Order:
     return (
         db.query(Order)
         .options(joinedload(Order.items).joinedload(OrderItem.product))
-        .filter(Order.id == order_id)
+        .filter(Order.user_id == user_id, Order.id == order_id)
         .first()
     )
 
 
 @router.get("")
-def list_orders(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def list_orders(user: CurrentUser = Depends(get_current_user)):
     orders = (
-        db.query(Order)
+        user.db.query(Order)
         .options(joinedload(Order.items).joinedload(OrderItem.product))
         .filter(Order.user_id == user.id)
         .order_by(Order.created_at.desc())
         .all()
     )
     return {"orders": [serialize_order(order) for order in orders]}
+
+
+_ = CartItem  # imported for type clarity in place_order's cart rows

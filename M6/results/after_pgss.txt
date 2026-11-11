@@ -1,0 +1,24 @@
+=== shard_0 / single (us-west-2)
+  calls  total_ms  mean_ms    rows  query
+    777      5267     6.78     777  SELECT checkout($1)
+   1554       388     0.25    1554  INSERT INTO cart_items (id, user_id, product_id, quantity) VALUES ($1::UUID, $2::UUID, $3:
+   2331       282     0.12    3885  SELECT cart_items.id AS cart_items_id, cart_items.user_id AS cart_items_user_id, cart_item
+   2331       107     0.05    2331  SELECT products.id, products.name, products.description, products.category, products.platf
+     23        85     3.71      23  SELECT * FROM pgbouncer.get_auth($1)
+    777        69     0.09     777  UPDATE cart_items SET quantity=$1::INTEGER WHERE cart_items.id = $2::UUID
+    777        58     0.07    1554  SELECT anon_1.orders_id AS anon_1_orders_id, anon_1.orders_user_id AS anon_1_orders_user_i
+    120        36     0.30     120  SELECT user_directory.email, user_directory.user_id FROM user_directory WHERE user_directo
+     64        35     0.55      64  SELECT users.id, users.email, users.password_hash, users.account_type, users.created_at FR
+   1554        29     0.02       0  SELECT cart_items.id AS cart_items_id, cart_items.user_id AS cart_items_user_id, cart_item
+=== shard_1 (us-east-1)
+  calls  total_ms  mean_ms    rows  query
+   1183      3780     3.20    1183  SELECT checkout($1)
+   3549       522     0.15    5915  SELECT cart_items.id AS cart_items_id, cart_items.user_id AS cart_items_user_id, cart_item
+   2366       491     0.21    2366  INSERT INTO cart_items (id, user_id, product_id, quantity) VALUES ($1::UUID, $2::UUID, $3:
+   3549       101     0.03    3549  SELECT products.id, products.name, products.description, products.category, products.platf
+   2366       101     0.04       0  SELECT cart_items.id AS cart_items_id, cart_items.user_id AS cart_items_user_id, cart_item
+   1183        69     0.06    1183  UPDATE cart_items SET quantity=$1::INTEGER WHERE cart_items.id = $2::UUID
+   1183        69     0.06    2366  SELECT anon_1.orders_id AS anon_1_orders_id, anon_1.orders_user_id AS anon_1_orders_user_i
+      4        61    15.21      80  SELECT products.id AS products_id, products.name AS products_name, products.description AS
+      4        40     9.93       4  SELECT count(*) AS count_1 FROM (SELECT products.id AS products_id, products.name AS produ
+     26        33     1.27      26  SELECT * FROM pgbouncer.get_auth($1)

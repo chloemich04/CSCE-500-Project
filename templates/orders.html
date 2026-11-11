@@ -56,7 +56,7 @@
           "</td></tr>";
       });
       block.innerHTML =
-        "<h2>Order #" + order.id + " · " + order.status + "</h2>" +
+        "<h2>Order #" + String(order.id).slice(0, 8) + " · " + order.status + "</h2>" +
         '<p class="muted">' + (order.created_at || "") + "</p>" +
         '<table class="data-table"><thead><tr><th>Product</th><th>Qty</th><th>Price at order</th><th>Line</th></tr></thead><tbody>' +
         rows +

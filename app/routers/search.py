@@ -1,4 +1,6 @@
-"""Product search (Postgres only, see migrations/002_search.sql)."""
+"""Product search (Postgres only). M6: product_search + search_products() exist in the
+shard schema of every shard (M6/sql/01_shard_schema.sql), resolved via search_path.
+Search is a catalog read, so it hits one shard (shard_0)."""
 
 from typing import Optional
 
@@ -11,13 +13,13 @@ from app.database import get_db
 router = APIRouter(prefix="/api", tags=["search"])
 
 SEARCH = text("""
-    SELECT * FROM search.search_products(
+    SELECT * FROM search_products(
         :q, :cat, CAST(:max_price AS numeric), CAST(:in_stock AS boolean), :lim, :off)
 """)
 
 FACETS = text("""
     SELECT category, count(*) AS n
-    FROM search.product_search
+    FROM product_search
     WHERE fts @@ websearch_to_tsquery('english', :q)
     GROUP BY category
     ORDER BY n DESC
@@ -57,7 +59,9 @@ def search_products(
         "page_size": page_size,
         "total": total,
         "results": [
-            {k: (float(v) if k == "price" else v) for k, v in r.items() if k != "total"} for r in rows
+            {k: (float(v) if k == "price" else str(v) if k == "id" else v)
+             for k, v in r.items() if k != "total"}
+            for r in rows
         ],
         "facets": [dict(f) for f in facets],
     }

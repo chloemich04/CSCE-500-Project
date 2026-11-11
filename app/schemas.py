@@ -1,5 +1,6 @@
 """JSON bodies the API accepts and returns."""
 
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -35,7 +36,7 @@ class ProductUpdate(ProductCreate):
 
 class ProductOut(ProductCreate):
     model_config = ConfigDict(from_attributes=True)
-    id: int
+    id: uuid.UUID
 
 
 class CategoryCreate(BaseModel):
@@ -44,9 +45,9 @@ class CategoryCreate(BaseModel):
 
 class CategoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
+    id: uuid.UUID
     name: str
 
 
 class AssignCategoriesRequest(BaseModel):
-    category_ids: list[int]
+    category_ids: list[uuid.UUID]

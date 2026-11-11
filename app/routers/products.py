@@ -1,96 +1,78 @@
-from typing import Optional
+"""Products API.
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+M6: the catalog is copied on every shard with the same ids. Reads go to ONE shard
+(the customer's own shard, or shard_0 for anonymous pages). Manager writes are
+idempotent upserts applied to EVERY shard (step 8).
+"""
+
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.models import Category, Product, User
+from app.auth import CurrentUser, get_current_user, require_manager
+from app.database import all_shards, get_db, new_id
+from app.models import Category, Product
 from app.schemas import ProductCreate, ProductOut, ProductUpdate
 
 router = APIRouter(prefix="/api", tags=["products"])
 
-
-def get_current_user(
-    db: Session = Depends(get_db), authorization: Optional[str] = Header(default=None, alias="Authorization")
-):
-    if authorization is None:
-        raise HTTPException(status_code=401, detail="Missing Authorization header.")
-
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        raise HTTPException(status_code=401, detail="Invalid authentication scheme.")
-
-    from jose import jwt
-
-    from app.config import settings
-
-    try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token.")
-
-    user_id = payload.get("sub")
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found.")
-
-    return user
+# Re-exported for older imports (categories router).
+__all__ = ["router", "require_manager", "get_current_user", "stock_share", "upsert_catalog_category"]
 
 
-def require_manager(user: User = Depends(get_current_user)):
-    if user.account_type != "store_manager":
-        raise HTTPException(status_code=403, detail="Store manager access required.")
-    return user
+def stock_share(total: int, shard: int, shards: int) -> int:
+    """Each shard owns a slice of the units; the slices add up to the real stock."""
+    return total // shards + (1 if shard < total % shards else 0)
 
 
-def sync_named_category(db: Session, product: Product) -> None:
-    """If products.category (text) is set, also link that name in the M2M table."""
-    if not product.category or not product.category.strip():
-        return
-    name = product.category.strip()
-    category = db.query(Category).filter(func.lower(Category.name) == name.lower()).first()
-    if category is None:
-        category = Category(name=name)
-        db.add(category)
+def upsert_catalog_category(shard_dbs: list[Session], name: str) -> uuid.UUID:
+    """Same category id on every shard (looked up by name on shard_0, else a new uuid)."""
+    existing = (
+        shard_dbs[0].query(Category).filter(func.lower(Category.name) == name.lower()).first()
+    )
+    category_id = existing.id if existing else new_id()
+    for db in shard_dbs:
+        db.merge(Category(id=category_id, name=existing.name if existing else name))
         db.flush()
-    if category not in product.categories:
-        product.categories.append(category)
+    return category_id
+
+
+def _write_product(product_id: uuid.UUID, payload: ProductCreate) -> dict:
+    data = payload.model_dump()
+    with all_shards() as dbs:
+        category_id = None
+        if data.get("category") and data["category"].strip():
+            category_id = upsert_catalog_category(dbs, data["category"].strip())
+        for i, db in enumerate(dbs):
+            product = db.merge(
+                Product(id=product_id, **{**data, "stock": stock_share(data["stock"], i, len(dbs))})
+            )
+            db.flush()
+            if category_id is not None:
+                category = db.get(Category, category_id)
+                if category not in product.categories:
+                    product.categories.append(category)
+        # Not one distributed transaction: if a commit fails halfway, re-running the
+        # same upsert converges every shard to the same row (idempotent).
+        for db in dbs:
+            db.commit()
+    return {"id": product_id, **data}
 
 
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
-def create_product(
-    payload: ProductCreate,
-    db: Session = Depends(get_db),
-    manager: User = Depends(require_manager),
-):
-    product = Product(**payload.model_dump())
-    db.add(product)
-    db.flush()
-    sync_named_category(db, product)
-    db.commit()
-    db.refresh(product)
-    return product
+def create_product(payload: ProductCreate, manager: CurrentUser = Depends(require_manager)):
+    return _write_product(new_id(), payload)
 
 
 @router.put("/products/{product_id}", response_model=ProductOut)
 def update_product(
-    product_id: int,
-    payload: ProductUpdate,
-    db: Session = Depends(get_db),
-    manager: User = Depends(require_manager),
+    product_id: uuid.UUID, payload: ProductUpdate, manager: CurrentUser = Depends(require_manager)
 ):
-    product = db.query(Product).filter(Product.id == product_id).first()
-    if product is None:
+    if manager.db.get(Product, product_id) is None:
         raise HTTPException(status_code=404, detail="Product not found.")
-
-    for key, value in payload.model_dump().items():
-        setattr(product, key, value)
-
-    sync_named_category(db, product)
-    db.commit()
-    db.refresh(product)
-    return product
+    return _write_product(product_id, payload)
 
 
 @router.get("/products/search", response_model=list[ProductOut])
@@ -99,28 +81,24 @@ def search_products(
     q: str = Query(..., min_length=1),
     page: int | None = Query(default=None, ge=1),
     page_size: int = Query(default=12, ge=1, le=100),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     search_term = f"%{q.lower()}%"
-    query = (
-        db.query(Product)
-        .filter(
-            or_(
-                func.lower(Product.name).like(search_term),
-                func.lower(Product.description).like(search_term),
-                func.lower(Product.category).like(search_term),
-                func.lower(Product.platform).like(search_term),
-            )
+    query = current_user.db.query(Product).filter(
+        or_(
+            func.lower(Product.name).like(search_term),
+            func.lower(Product.description).like(search_term),
+            func.lower(Product.category).like(search_term),
+            func.lower(Product.platform).like(search_term),
         )
     )
     return paginate_products(query, response, page, page_size)
 
 
 @router.get("/products/{product_id}", response_model=ProductOut)
-def get_product(product_id: int, db: Session = Depends(get_db)):
+def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)):
     """Query a single table (products) and return one row."""
-    product = db.query(Product).filter(Product.id == product_id).first()
+    product = db.get(Product, product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found.")
     return product
@@ -129,12 +107,12 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 @router.get("/products", response_model=list[ProductOut])
 def list_products(
     response: Response,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
     page: int | None = Query(default=None, ge=1),
     page_size: int = Query(default=12, ge=1, le=100),
 ):
-    return paginate_products(db.query(Product), response, page, page_size)
+    # Stock shown = what this customer can actually buy (their shard's allocation).
+    return paginate_products(current_user.db.query(Product), response, page, page_size)
 
 
 def paginate_products(query, response: Response, page: int | None, page_size: int):
