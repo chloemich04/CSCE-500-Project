@@ -93,6 +93,12 @@ Notes:
 - Set `DATABASE_URL` to your Supabase Postgres connection URI (Project Settings -> Database). Use the **session pooler** URI (`...pooler.supabase.com...`) if you connect over an IPv4 network.
 - Set `JWT_SECRET` to a long random string.
 - Optional: `PORT` (default 8000), `JWT_EXPIRE_MINUTES` (default 60).
+- **M6 sharding:** `DATABASE_URL` (or `SHARD_0_URL`) = shard_0, which also holds the login directory;
+  `SHARD_1_URL` = shard_1 (second Supabase project, session pooler URL). Both are required in every
+  environment (local, Azure VM): without `SHARD_1_URL` the users of shard_1 cannot log in.
+  Optional: `DIRECTORY_URL` (default = shard_0), `SHARD_SCHEMA` (default `shard`), `SHARD_COUNT`,
+  `DB_POOL_SIZE` (default 5 connections per shard per worker). Build the shards with
+  `python M6/setup_shards.py sharded` (see `M6/m6-report.md`).
 
 If the URI starts with `postgres://`, the app converts it to `postgresql://` automatically. If the connection fails, add `?sslmode=require` at the end of the URL.
 

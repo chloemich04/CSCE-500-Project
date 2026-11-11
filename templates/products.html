@@ -164,7 +164,7 @@
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ product_id: parseInt(productId, 10), quantity: quantity }),
+      body: JSON.stringify({ product_id: productId, quantity: quantity }),
     });
 
     const data = await res.json().catch(function () { return {}; });

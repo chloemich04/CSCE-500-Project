@@ -1,0 +1,15 @@
+--- shard_0 (buckets 0-31)
+users / orders / order_items: 10040 30085 74739
+users on the wrong shard (expect 0): 0
+orders whose user is not here (expect 0): 0
+catalog count(*), sum(price), sum(stock): (5000, Decimal('148575.01'), 250000000)
+python bucket == SQL bucket on random uuids: OK
+wrong-shard insert refused: new row for relation "users" violates check constraint "users_belong_here"
+directory -> shard split: [('shard_0', 10040), ('shard_1', 9963)]
+--- shard_1 (buckets 32-63)
+users / orders / order_items: 9963 29916 73442
+users on the wrong shard (expect 0): 0
+orders whose user is not here (expect 0): 0
+catalog count(*), sum(price), sum(stock): (5000, Decimal('148575.01'), 250000000)
+python bucket == SQL bucket on random uuids: OK
+wrong-shard insert refused: new row for relation "users" violates check constraint "users_belong_here"

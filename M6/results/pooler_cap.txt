@@ -1,0 +1,2 @@
+shard_0 (project 1): session #16 refused -> connection to server at "aws-0-us-west-2.pooler.supabase.com" (44.238.118.41), port 5432 failed: FATAL:  (EMAXCONNSESSIO
+shard_1 (project 2): session #16 refused -> connection to server at "aws-1-us-east-1.pooler.supabase.com" (3.227.209.82), port 5432 failed: FATAL:  (EMAXCONNSESSION
